@@ -1,269 +1,314 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
-import { db, LocalProduct } from '@/lib/db';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  ShoppingCart,
-  Plus,
-  Minus,
-  Trash2,
-  Barcode,
-  Check,
-  Search,
-  Package,
-  Zap,
-  Store,
-  Wifi,
-  Receipt,
-  Smartphone,
-  Edit3,
   PlusCircle,
-  X,
+  Edit3,
+  Sliders,
+  ShoppingCart,
+  Package,
+  Check,
+  Receipt,
+  Trash2,
+  Minus,
+  Plus,
   Banknote,
+  Hash,
+  X,
   Camera,
   Printer,
-  Hash,
-  Settings,
-  Sliders
+  Search,
+  Store,
+  CheckCircle2,
 } from 'lucide-react';
 
-interface CartItem extends LocalProduct {
-  quantity: number;
-}
+import {
+  Product,
+  CartItem,
+  ScanMethod,
+  PaymentMethod,
+  ActiveTab,
+  ReceiptData,
+} from '@/types/pos';
 
-interface CompletedSale {
-  id: string;
-  items: CartItem[];
-  totalAmount: number;
-  paymentMethod: 'cash' | 'gcash';
-  cashReceived?: number;
-  changeDue?: number;
-  gcashRefNumber?: string;
-  timestamp: string;
-}
-
-type ScanMethod = 'hardware' | 'camera' | 'manual';
-
-const SAMPLE_PRODUCTS: LocalProduct[] = [
-  { id: '1', name: 'Lucky Me Pancit Canton Extra Hot', price: 15.00, stock: 48, barcode: '480001602201' },
-  { id: '2', name: 'San Mig Coffee 3-in-1 Original', price: 8.50, stock: 120, barcode: '480001111222' },
-  { id: '3', name: 'Coca-Cola Original 230ml Solo', price: 18.00, stock: 32, barcode: '480005553331' },
-  { id: '4', name: 'Century Tuna Flakes in Oil 180g', price: 42.00, stock: 24, barcode: '480008884442' },
-  { id: '5', name: 'Piattos Cheese Large 85g', price: 38.00, stock: 15, barcode: '480009995553' },
-  { id: '6', name: 'Bear Brand Powdered Milk 33g', price: 16.00, stock: 60, barcode: '480007776664' },
+const initialProducts: Product[] = [
+  { id: '1', name: 'San Mig Coffee 3-in-1 Original', barcode: '4800016644021', price: 12.00, stock: 45 },
+  { id: '2', name: 'Lucky Me! Instant Pancit Canton Extra Hot', barcode: '4800016021020', price: 15.50, stock: 32 },
+  { id: '3', name: 'Coca-Cola 1.5L PET', barcode: '4800000000012', price: 75.00, stock: 18 },
+  { id: '4', name: 'Datu Puti Vinegar 200ml', barcode: '4800011000111', price: 18.00, stock: 24 },
+  { id: '5', name: 'Silver Swan Soy Sauce 200ml', barcode: '4800011000222', price: 19.00, stock: 15 },
+  { id: '6', name: 'Bear Brand Fortified Powdered Milk 33g', barcode: '4800016000333', price: 16.00, stock: 50 },
 ];
 
-export default function PosDashboard() {
-  const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'eload' | 'settings'>('pos');
-  const [products, setProducts] = useState<LocalProduct[]>([]);
+export default function POSSystem() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('inventory');
+  const [products, setProducts] = useState<Product[]>(initialProducts);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [barcodeInput, setBarcodeInput] = useState('');
-  
-  // Scanner Settings State
+
   const [posScanMethod, setPosScanMethod] = useState<ScanMethod>('hardware');
   const [inventoryScanMethod, setInventoryScanMethod] = useState<ScanMethod>('camera');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [cashReceived, setCashReceived] = useState<string>('');
+  const [gcashRefNumber, setGcashRefNumber] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
-  // Checkout & Payment State
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash'>('cash');
-  const [cashReceived, setCashReceived] = useState('');
-  const [gcashRefNumber, setGcashRefNumber] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  // Modal States
+  // Form Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<LocalProduct | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formName, setFormName] = useState('');
   const [formPrice, setFormPrice] = useState('');
   const [formStock, setFormStock] = useState('');
   const [formBarcode, setFormBarcode] = useState('');
 
-  // Camera & Target Context ('pos' vs 'inventory')
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [cameraTarget, setCameraTarget] = useState<'pos' | 'inventory'>('pos');
-  const [receiptData, setReceiptData] = useState<CompletedSale | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // POS Checkout Overlay Camera State
+  const [isPosCameraOpen, setIsPosCameraOpen] = useState(false);
+  const posVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  // E-Load Form State
-  const [loadNumber, setLoadNumber] = useState('');
-  const [loadAmount, setLoadAmount] = useState('50');
-  const [telco, setTelco] = useState<'Globe' | 'Smart' | 'DITO'>('Globe');
+  // Inline Modal Camera State
+  const [isInlineScanning, setIsInlineScanning] = useState(false);
+  const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [scannedFeedback, setScannedFeedback] = useState<string | null>(null);
 
-  // Load scanner settings on initial render
-  useEffect(() => {
-    setMounted(true);
-    const savedPosMethod = localStorage.getItem('posScanMethod') as ScanMethod;
-    const savedInvMethod = localStorage.getItem('inventoryScanMethod') as ScanMethod;
-    if (savedPosMethod) setPosScanMethod(savedPosMethod);
-    if (savedInvMethod) setInventoryScanMethod(savedInvMethod);
+  // Receipt Modal State
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
-    async function loadProducts() {
-      try {
-        const { data } = await supabase.from('products').select('*');
-        if (data && data.length > 0) {
-          setProducts(data);
-          await db.products.bulkPut(data);
-          return;
-        }
-      } catch {
-        // Fallback to Dexie
-      }
+  // Physical Scanner Gun Listener Buffer
+  const barcodeBuffer = useRef<string>('');
+  const lastKeyTime = useRef<number>(0);
 
-      const localData = await db.products.toArray();
-      if (localData.length > 0) {
-        setProducts(localData);
-      } else {
-        setProducts(SAMPLE_PRODUCTS);
-        await db.products.bulkPut(SAMPLE_PRODUCTS);
-      }
-    }
-
-    loadProducts();
-  }, []);
-
-  // Persist Settings
-  const handleUpdatePosMethod = (method: ScanMethod) => {
-    setPosScanMethod(method);
-    localStorage.setItem('posScanMethod', method);
-  };
-
-  const handleUpdateInventoryMethod = (method: ScanMethod) => {
-    setInventoryScanMethod(method);
-    localStorage.setItem('inventoryScanMethod', method);
-  };
-
-  // Hardware Scanner Global Buffer Listener
-  useEffect(() => {
-    let barcodeBuffer = '';
-    let timeoutId: NodeJS.Timeout;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-
-      if (e.key === 'Enter') {
-        if (barcodeBuffer.length > 2) {
-          if (isModalOpen) {
-            setFormBarcode(barcodeBuffer.trim());
-          } else {
-            handleScanCode(barcodeBuffer.trim());
-          }
-          barcodeBuffer = '';
-        }
-      } else if (e.key.length === 1) {
-        barcodeBuffer += e.key;
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          barcodeBuffer = '';
-        }, 100);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [products, isModalOpen]);
-
-  // Camera Barcode Detector Stream
-  useEffect(() => {
-    if (!isCameraOpen) return;
-    let stream: MediaStream | null = null;
-    let intervalId: NodeJS.Timeout;
-
-    async function startCamera() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-        });
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-
-        if ('BarcodeDetector' in window) {
-          const detector = new (window as any).BarcodeDetector({
-            formats: ['qr_code', 'ean_13', 'code_128', 'ean_8', 'upc_a'],
-          });
-
-          intervalId = setInterval(async () => {
-            if (videoRef.current && videoRef.current.readyState === 4) {
-              try {
-                const barcodes = await detector.detect(videoRef.current);
-                if (barcodes.length > 0) {
-                  const scannedCode = barcodes[0].rawValue;
-                  if (cameraTarget === 'inventory') {
-                    setFormBarcode(scannedCode);
-                  } else {
-                    handleScanCode(scannedCode);
-                  }
-                  setIsCameraOpen(false);
-                }
-              } catch (err) {
-                console.error('Barcode detection error:', err);
-              }
-            }
-          }, 300);
-        }
-      } catch (err) {
-        alert('Could not open device camera. Ensure permissions are granted.');
-        setIsCameraOpen(false);
-      }
-    }
-
-    startCamera();
-
-    return () => {
-      if (stream) stream.getTracks().forEach((track) => track.stop());
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isCameraOpen, cameraTarget]);
-
-  if (!mounted) {
-    return <div className="h-screen bg-slate-900" />;
-  }
-
-  // --- Cart Calculations ---
   const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const numCashReceived = parseFloat(cashReceived) || 0;
-  const changeDue = numCashReceived - totalAmount;
+  const cashVal = parseFloat(cashReceived) || 0;
+  const changeDue = cashVal - totalAmount;
 
-  const handleScanCode = (code: string) => {
-    const found = products.find((p) => p.barcode === code);
-    if (found) {
-      addToCart(found);
-    } else {
-      alert(`Barcode "${code}" not found in inventory.`);
-    }
-  };
+  const isCheckoutDisabled =
+    cart.length === 0 ||
+    loading ||
+    (paymentMethod === 'cash' && (cashReceived === '' || changeDue < 0)) ||
+    (paymentMethod === 'gcash' && !gcashRefNumber.trim());
 
-  const addToCart = (product: LocalProduct) => {
+  const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
-      const existing = prev.find((item) => (item.id && item.id === product.id) || item.barcode === product.barcode);
+      const existing = prev.find((item) => item.id === product.id || item.barcode === product.barcode);
       if (existing) {
         return prev.map((item) =>
-          ((item.id && item.id === product.id) || item.barcode === product.barcode)
+          item.id === product.id || item.barcode === product.barcode
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       }
       return [...prev, { ...product, quantity: 1 }];
     });
+  }, []);
+
+  const handleBarcodeScanned = useCallback(
+    (code: string) => {
+      const trimmedCode = code.trim();
+      if (!trimmedCode) return;
+
+      if (isModalOpen) {
+        setFormBarcode(trimmedCode);
+        setScannedFeedback(`Scanned Code: ${trimmedCode}`);
+        setIsInlineScanning(false);
+        setTimeout(() => setScannedFeedback(null), 4000);
+      } else if (activeTab === 'pos') {
+        const found = products.find((p) => p.barcode === trimmedCode);
+        if (found) {
+          addToCart(found);
+          setScannedFeedback(`Added ${found.name}`);
+          setTimeout(() => setScannedFeedback(null), 2000);
+        } else {
+          alert(`Product with barcode "${trimmedCode}" not found.`);
+        }
+      }
+    },
+    [isModalOpen, activeTab, products, addToCart]
+  );
+
+  // Hardware Scanner Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA';
+
+      if (isInput && !isModalOpen) return;
+
+      const currentTime = Date.now();
+      if (currentTime - lastKeyTime.current > 80) {
+        barcodeBuffer.current = '';
+      }
+      lastKeyTime.current = currentTime;
+
+      if (e.key === 'Enter') {
+        if (barcodeBuffer.current.length > 2) {
+          e.preventDefault();
+          handleBarcodeScanned(barcodeBuffer.current);
+          barcodeBuffer.current = '';
+        }
+      } else if (e.key.length === 1) {
+        barcodeBuffer.current += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleBarcodeScanned, isModalOpen]);
+
+  // Inline Modal Camera Stream & Detector
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    let animFrameId: number;
+    let active = true;
+
+    if (isInlineScanning) {
+      navigator.mediaDevices
+        ?.getUserMedia({ video: { facingMode: 'environment' } })
+        .then((s) => {
+          if (!active) return;
+          stream = s;
+          if (inlineVideoRef.current) {
+            inlineVideoRef.current.srcObject = s;
+            inlineVideoRef.current.play();
+
+            if ('BarcodeDetector' in window) {
+              const barcodeDetector = new (window as any).BarcodeDetector({
+                formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
+              });
+
+              const detect = async () => {
+                if (inlineVideoRef.current && inlineVideoRef.current.readyState === 4) {
+                  try {
+                    const barcodes = await barcodeDetector.detect(inlineVideoRef.current);
+                    if (barcodes.length > 0 && active) {
+                      const code = barcodes[0].rawValue;
+                      handleBarcodeScanned(code);
+                      return;
+                    }
+                  } catch (err) {
+                    console.error('Inline scanner error:', err);
+                  }
+                }
+                if (active) animFrameId = requestAnimationFrame(detect);
+              };
+              animFrameId = requestAnimationFrame(detect);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('Camera access error:', err);
+          alert('Could not open camera.');
+          setIsInlineScanning(false);
+        });
+    }
+
+    return () => {
+      active = false;
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+    };
+  }, [isInlineScanning, handleBarcodeScanned]);
+
+  // POS Checkout Camera Stream
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    let animFrameId: number;
+    let active = true;
+
+    if (isPosCameraOpen) {
+      navigator.mediaDevices
+        ?.getUserMedia({ video: { facingMode: 'environment' } })
+        .then((s) => {
+          if (!active) return;
+          stream = s;
+          if (posVideoRef.current) {
+            posVideoRef.current.srcObject = s;
+            posVideoRef.current.play();
+
+            if ('BarcodeDetector' in window) {
+              const barcodeDetector = new (window as any).BarcodeDetector({
+                formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
+              });
+
+              const detect = async () => {
+                if (posVideoRef.current && posVideoRef.current.readyState === 4) {
+                  try {
+                    const barcodes = await barcodeDetector.detect(posVideoRef.current);
+                    if (barcodes.length > 0 && active) {
+                      handleBarcodeScanned(barcodes[0].rawValue);
+                      setIsPosCameraOpen(false);
+                      return;
+                    }
+                  } catch (err) {
+                    console.error('POS camera scan error:', err);
+                  }
+                }
+                if (active) animFrameId = requestAnimationFrame(detect);
+              };
+              animFrameId = requestAnimationFrame(detect);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('POS camera error:', err);
+          alert('Could not open camera.');
+          setIsPosCameraOpen(false);
+        });
+    }
+
+    return () => {
+      active = false;
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+    };
+  }, [isPosCameraOpen, handleBarcodeScanned]);
+
+  const openAddModal = () => {
+    setEditingProduct(null);
+    setFormName('');
+    setFormPrice('');
+    setFormStock('');
+    setFormBarcode('');
+    setIsInlineScanning(false);
+    setIsModalOpen(true);
   };
 
-  const handleBarcodeSubmit = (e: React.FormEvent) => {
+  const openEditModal = (product: Product) => {
+    setEditingProduct(product);
+    setFormName(product.name);
+    setFormPrice(product.price.toString());
+    setFormStock(product.stock.toString());
+    setFormBarcode(product.barcode || '');
+    setIsInlineScanning(false);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!barcodeInput.trim()) return;
-    handleScanCode(barcodeInput.trim());
-    setBarcodeInput('');
+    if (!formName || !formPrice) return;
+
+    const newProd: Product = {
+      id: editingProduct ? editingProduct.id : Date.now().toString(),
+      name: formName,
+      price: parseFloat(formPrice) || 0,
+      stock: parseInt(formStock, 10) || 0,
+      barcode: formBarcode,
+    };
+
+    if (editingProduct) {
+      setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? newProd : p)));
+    } else {
+      setProducts((prev) => [...prev, newProd]);
+    }
+
+    setIsInlineScanning(false);
+    setIsModalOpen(false);
   };
 
-  const updateQuantity = (id: string | undefined, barcode: string, delta: number) => {
+  const updateQuantity = (id: string, barcode: string, delta: number) => {
     setCart((prev) =>
       prev
         .map((item) => {
-          if ((id && item.id === id) || item.barcode === barcode) {
+          if (item.id === id || item.barcode === barcode) {
             const newQty = item.quantity + delta;
             return newQty > 0 ? { ...item, quantity: newQty } : null;
           }
@@ -273,110 +318,35 @@ export default function PosDashboard() {
     );
   };
 
-  // --- Product Management ---
-  const openAddModal = () => {
-    setEditingProduct(null);
-    setFormName('');
-    setFormPrice('');
-    setFormStock('');
-    setFormBarcode('');
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (p: LocalProduct) => {
-    setEditingProduct(p);
-    setFormName(p.name);
-    setFormPrice(p.price.toString());
-    setFormStock(p.stock.toString());
-    setFormBarcode(p.barcode || '');
-    setIsModalOpen(true);
-  };
-
-  const openCameraScanner = (target: 'pos' | 'inventory') => {
-    setCameraTarget(target);
-    setIsCameraOpen(true);
-  };
-
-  const handleSaveProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formName.trim() || !formPrice) return;
-
-    const priceNum = parseFloat(formPrice) || 0;
-    const stockNum = parseInt(formStock, 10) || 0;
-
-    const productPayload = {
-      name: formName.trim(),
-      price: priceNum,
-      stock: stockNum,
-      barcode: formBarcode.trim(),
-    };
-
-    try {
-      if (editingProduct && editingProduct.id) {
-        const updatedProduct: LocalProduct = { ...editingProduct, ...productPayload };
-        await supabase.from('products').update(productPayload).eq('id', editingProduct.id);
-        await db.products.put(updatedProduct);
-        setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? updatedProduct : p)));
-      } else {
-        let newProduct: LocalProduct = { id: crypto.randomUUID(), ...productPayload };
-        const { data, error } = await supabase.from('products').insert([productPayload]).select().single();
-        if (!error && data) newProduct = data;
-        await db.products.put(newProduct);
-        setProducts((prev) => [...prev, newProduct]);
-      }
-      setIsModalOpen(false);
-    } catch {
-      const fallbackProduct: LocalProduct = {
-        id: editingProduct?.id || crypto.randomUUID(),
-        ...productPayload,
-      };
-      await db.products.put(fallbackProduct);
-      setProducts((prev) =>
-        editingProduct
-          ? prev.map((p) => (p.id === editingProduct.id ? fallbackProduct : p))
-          : [...prev, fallbackProduct]
-      );
-      setIsModalOpen(false);
-    }
-  };
-
-  // --- Checkout Handler ---
-  const handleCheckout = async () => {
+  const handleCheckout = () => {
     if (cart.length === 0) return;
     setLoading(true);
 
-    const saleRecord: CompletedSale = {
-      id: `TX-${Date.now().toString().slice(-6)}`,
-      items: [...cart],
-      totalAmount,
-      paymentMethod,
-      cashReceived: paymentMethod === 'cash' ? numCashReceived : undefined,
-      changeDue: paymentMethod === 'cash' ? changeDue : undefined,
-      gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber.trim() : undefined,
-      timestamp: new Date().toLocaleString(),
-    };
+    setTimeout(() => {
+      setProducts((prev) =>
+        prev.map((p) => {
+          const itemInCart = cart.find((c) => c.id === p.id || c.barcode === p.barcode);
+          return itemInCart ? { ...p, stock: Math.max(0, p.stock - itemInCart.quantity) } : p;
+        })
+      );
 
-    try {
-      await supabase.from('sales').insert([
-        {
-          total_amount: totalAmount,
-          payment_method: paymentMethod,
-          gcash_ref_number: paymentMethod === 'gcash' ? gcashRefNumber.trim() : null,
-        },
-      ]);
-    } catch {
-      console.log('Saved transaction locally.');
-    } finally {
-      setLoading(false);
-      setReceiptData(saleRecord);
+      const receipt: ReceiptData = {
+        id: `INV-${Date.now().toString().slice(-6)}`,
+        timestamp: new Date().toLocaleString('en-PH', { dateStyle: 'short', timeStyle: 'short' }),
+        items: [...cart],
+        totalAmount,
+        paymentMethod,
+        cashReceived: paymentMethod === 'cash' ? cashVal : undefined,
+        changeDue: paymentMethod === 'cash' ? changeDue : undefined,
+        gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : undefined,
+      };
+
+      setReceiptData(receipt);
       setCart([]);
       setCashReceived('');
       setGcashRefNumber('');
-    }
-  };
-
-  const handlePrintReceipt = () => {
-    window.print();
+      setLoading(false);
+    }, 600);
   };
 
   const filteredProducts = products.filter(
@@ -385,269 +355,122 @@ export default function PosDashboard() {
       p.barcode.includes(searchQuery)
   );
 
-  const isCheckoutDisabled =
-    loading ||
-    cart.length === 0 ||
-    (paymentMethod === 'cash' && (numCashReceived < totalAmount || !cashReceived)) ||
-    (paymentMethod === 'gcash' && !gcashRefNumber.trim());
-
   return (
-    <div className="flex h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden print:bg-white print:text-black">
-      {/* Sidebar Navigation */}
-      <aside className="w-20 lg:w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between p-4 print:hidden">
-        <div className="space-y-6">
-          <div className="flex items-center gap-3 px-2">
-            <div className="p-2.5 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-500/30">
+    <div className="flex h-screen w-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between p-4 print:hidden">
+        <div>
+          <div className="flex items-center gap-3 px-2 py-4 border-b border-slate-800 mb-6">
+            <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-600/30">
               <Store size={22} />
             </div>
-            <div className="hidden lg:block">
-              <h1 className="font-bold text-lg leading-none text-white">Peddlr POS</h1>
-              <span className="text-xs text-blue-400 font-medium">Store Terminal</span>
+            <div>
+              <h1 className="font-bold text-base leading-tight">PEDDLR POS</h1>
+              <p className="text-[11px] text-slate-400">Retail & Inventory</p>
             </div>
           </div>
 
-          <nav className="space-y-1">
+          <nav className="space-y-1.5">
             <button
               onClick={() => setActiveTab('pos')}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition font-medium ${
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition ${
                 activeTab === 'pos'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
               }`}
             >
-              <ShoppingCart size={20} />
-              <span className="hidden lg:inline">POS Counter</span>
+              <ShoppingCart size={18} /> POS Terminal
             </button>
-
             <button
               onClick={() => setActiveTab('inventory')}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition font-medium ${
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition ${
                 activeTab === 'inventory'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
               }`}
             >
-              <Package size={20} />
-              <span className="hidden lg:inline">Inventory</span>
+              <Package size={18} /> Stock Ledger
             </button>
-
-            <button
-              onClick={() => setActiveTab('eload')}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition font-medium ${
-                activeTab === 'eload'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-              }`}
-            >
-              <Zap size={20} />
-              <span className="hidden lg:inline">E-Loading</span>
-            </button>
-
             <button
               onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition font-medium ${
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition ${
                 activeTab === 'settings'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  ? 'bg-slate-800 text-white'
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
               }`}
             >
-              <Settings size={20} />
-              <span className="hidden lg:inline">Settings</span>
+              <Sliders size={18} /> Hardware Settings
             </button>
           </nav>
         </div>
 
-        <div className="px-3 py-2.5 bg-slate-900 rounded-xl border border-slate-800 hidden lg:flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wifi size={16} className="text-emerald-400" />
-            <span className="text-xs font-semibold text-emerald-400">System Ready</span>
-          </div>
-          <span className="text-[10px] text-slate-500 font-mono">v1.4</span>
+        <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400 space-y-1">
+          <p className="font-semibold text-slate-300">Scanner Mode:</p>
+          <p className="capitalize">POS: <span className="text-blue-400">{posScanMethod}</span></p>
+          <p className="capitalize">Stock: <span className="text-emerald-400">{inventoryScanMethod}</span></p>
         </div>
       </aside>
 
-      {/* Main Content Workspace */}
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-900 overflow-hidden print:hidden">
-        {/* Top Header */}
-        <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between gap-4 bg-slate-950/40">
-          <div className="flex items-center gap-3 flex-1 max-w-md">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-2.5 text-slate-500" size={18} />
-              <input
-                type="text"
-                placeholder="Search items or barcode..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-800/80 border border-slate-700/60 rounded-xl pl-10 pr-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Direct POS Scan Action based on Settings */}
-            {posScanMethod === 'camera' && (
-              <button
-                onClick={() => openCameraScanner('pos')}
-                className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-blue-600/20"
-              >
-                <Camera size={16} /> Scan via Camera
-              </button>
-            )}
-
-            {(posScanMethod === 'hardware' || posScanMethod === 'manual') && (
-              <form onSubmit={handleBarcodeSubmit} className="flex items-center gap-2">
-                <div className="relative">
-                  <Barcode className="absolute left-3 top-2.5 text-slate-400" size={18} />
-                  <input
-                    type="text"
-                    placeholder={posScanMethod === 'hardware' ? 'Hardware Scanner Ready...' : 'Enter barcode...'}
-                    value={barcodeInput}
-                    onChange={(e) => setBarcodeInput(e.target.value)}
-                    className="bg-slate-800/80 border border-slate-700/60 rounded-xl pl-10 pr-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500 w-36 lg:w-48"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-3 py-2 rounded-xl transition shadow-md shadow-blue-600/20"
-                >
-                  Scan
-                </button>
-              </form>
-            )}
-
-            <button
-              onClick={openAddModal}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
-            >
-              <PlusCircle size={18} />
-              <span className="hidden sm:inline">Add Product</span>
-            </button>
-          </div>
-        </header>
-
-        {/* POS Grid View */}
+      {/* Main Workspace */}
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-hidden">
         {activeTab === 'pos' && (
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-                <Store size={20} className="text-blue-400" /> Inventory Catalog
-              </h2>
-              <span className="text-xs bg-slate-800 border border-slate-700 px-3 py-1 rounded-full text-slate-400 font-mono">
-                Scanner Mode: <strong className="text-blue-400 uppercase">{posScanMethod}</strong>
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredProducts.map((product) => (
-                <div
-                  key={product.id || product.barcode}
-                  onClick={() => addToCart(product)}
-                  className="bg-slate-800/50 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 p-4 rounded-2xl cursor-pointer transition flex flex-col justify-between group shadow-sm hover:shadow-lg"
-                >
-                  <div>
-                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider block mb-1">
-                      {product.barcode || 'NO BARCODE'}
-                    </span>
-                    <h3 className="font-semibold text-slate-200 group-hover:text-blue-400 transition text-sm line-clamp-2">
-                      {product.name}
-                    </h3>
-                  </div>
-
-                  <div className="mt-4 flex items-end justify-between">
-                    <div>
-                      <span className="text-[11px] text-slate-400 block">Stock: {product.stock}</span>
-                      <p className="text-lg font-bold text-emerald-400">₱{product.price.toFixed(2)}</p>
-                    </div>
-                    <button className="p-2 bg-slate-700 group-hover:bg-blue-600 text-white rounded-xl transition">
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* E-Load Form View */}
-        {activeTab === 'eload' && (
-          <div className="flex-1 p-6 max-w-xl mx-auto w-full">
-            <div className="bg-slate-800/60 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl">
-                  <Smartphone size={24} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">E-Load Station</h2>
-                  <p className="text-xs text-slate-400">Direct top-up to mobile accounts</p>
-                </div>
+          <div className="flex-1 flex flex-col p-6 overflow-hidden">
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3.5 top-3 text-slate-500" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search item name or barcode..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-2 block">Network Provider</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {(['Globe', 'Smart', 'DITO'] as const).map((provider) => (
-                      <button
-                        key={provider}
-                        onClick={() => setTelco(provider)}
-                        className={`py-3 font-bold rounded-xl border text-sm transition ${
-                          telco === provider
-                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20'
-                            : 'bg-slate-800 border-slate-700 text-slate-300'
-                        }`}
-                      >
-                        {provider}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Phone Number</label>
-                  <input
-                    type="text"
-                    placeholder="09XXXXXXXXX"
-                    value={loadNumber}
-                    onChange={(e) => setLoadNumber(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 font-mono text-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-2 block">Amount</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {['20', '50', '100', '200'].map((amt) => (
-                      <button
-                        key={amt}
-                        onClick={() => setLoadAmount(amt)}
-                        className={`py-2 rounded-xl text-sm font-semibold border ${
-                          loadAmount === amt
-                            ? 'bg-slate-100 text-slate-900 border-white'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
-                        }`}
-                      >
-                        ₱{amt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
+              {posScanMethod === 'camera' && (
                 <button
-                  onClick={() => {
-                    if (!loadNumber) return alert('Please input phone number.');
-                    alert(`Loaded ₱${loadAmount} to ${loadNumber} (${telco})`);
-                    setLoadNumber('');
-                  }}
-                  className="w-full mt-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+                  onClick={() => setIsPosCameraOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-md shadow-blue-600/20"
                 >
-                  <Zap size={18} /> Top-Up Load
+                  <Camera size={16} /> Open Camera Scanner
                 </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {filteredProducts.map((product) => (
+                  <div
+                    key={product.id}
+                    onClick={() => addToCart(product)}
+                    className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-2xl flex flex-col justify-between cursor-pointer transition group hover:shadow-lg hover:shadow-blue-900/10"
+                  >
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-mono text-slate-500 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
+                          {product.barcode || 'NO CODE'}
+                        </span>
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${product.stock > 0 ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-400'}`}>
+                          {product.stock} left
+                        </span>
+                      </div>
+                      <h3 className="font-semibold text-xs text-slate-200 group-hover:text-white transition line-clamp-2">
+                        {product.name}
+                      </h3>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-sm font-bold text-emerald-400">₱{product.price.toFixed(2)}</span>
+                      <span className="p-1.5 bg-blue-600/10 text-blue-400 group-hover:bg-blue-600 group-hover:text-white rounded-lg transition">
+                        <Plus size={14} />
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* Inventory Master List View */}
         {activeTab === 'inventory' && (
           <div className="flex-1 p-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
@@ -660,7 +483,7 @@ export default function PosDashboard() {
               </div>
               <button
                 onClick={openAddModal}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
               >
                 <PlusCircle size={16} /> Add Product
               </button>
@@ -705,7 +528,6 @@ export default function PosDashboard() {
           </div>
         )}
 
-        {/* Scanner Settings View */}
         {activeTab === 'settings' && (
           <div className="flex-1 p-6 overflow-y-auto max-w-2xl mx-auto w-full">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-800">
@@ -714,29 +536,28 @@ export default function PosDashboard() {
               </div>
               <div>
                 <h2 className="text-xl font-bold">Scanner Configuration</h2>
-                <p className="text-xs text-slate-400">Set default hardware or camera devices for scanning items</p>
+                <p className="text-xs text-slate-400">Set default scanning behavior for POS and Stock entry</p>
               </div>
             </div>
 
             <div className="space-y-6">
-              {/* POS Scanner Preference */}
               <div className="bg-slate-800/50 border border-slate-800 rounded-2xl p-5">
                 <h3 className="font-semibold text-slate-100 mb-1 flex items-center gap-2">
                   <ShoppingCart size={18} className="text-blue-400" /> POS Checkout Scanning Device
                 </h3>
                 <p className="text-xs text-slate-400 mb-4">
-                  Choose how products are scanned when adding items to customer cart at checkout.
+                  Select the active method used when adding items at checkout.
                 </p>
 
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { id: 'hardware', label: 'Hardware Scanner', desc: 'USB or Bluetooth Handheld Gun' },
-                    { id: 'camera', label: 'Device Camera', desc: 'Built-in Mobile or Webcam' },
-                    { id: 'manual', label: 'Manual Entry', desc: 'Type Barcode or Search Item' },
+                    { id: 'hardware', label: 'Hardware Gun', desc: 'USB or Bluetooth Handheld Scanner' },
+                    { id: 'camera', label: 'Device Camera', desc: 'Webcam or Mobile Camera' },
+                    { id: 'manual', label: 'Manual Entry', desc: 'Search or enter barcode manually' },
                   ].map((option) => (
                     <button
                       key={option.id}
-                      onClick={() => handleUpdatePosMethod(option.id as ScanMethod)}
+                      onClick={() => setPosScanMethod(option.id as ScanMethod)}
                       className={`p-4 rounded-xl border text-left transition flex flex-col justify-between ${
                         posScanMethod === option.id
                           ? 'bg-blue-600/10 border-blue-500 text-white'
@@ -755,24 +576,23 @@ export default function PosDashboard() {
                 </div>
               </div>
 
-              {/* Inventory Scanner Preference */}
               <div className="bg-slate-800/50 border border-slate-800 rounded-2xl p-5">
                 <h3 className="font-semibold text-slate-100 mb-1 flex items-center gap-2">
-                  <Package size={18} className="text-emerald-400" /> Inventory Addition Scanning Device
+                  <Package size={18} className="text-emerald-400" /> Stock Entry Scanning Device
                 </h3>
                 <p className="text-xs text-slate-400 mb-4">
-                  Choose how barcodes are captured when registering or updating product inventory.
+                  Select default barcode capturing behavior when creating or editing items.
                 </p>
 
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { id: 'hardware', label: 'Hardware Scanner', desc: 'Auto-fill form via physical scanner' },
-                    { id: 'camera', label: 'Device Camera', desc: 'Capture barcode using device camera' },
+                    { id: 'hardware', label: 'Hardware Gun', desc: 'Auto-fill form via physical scanner' },
+                    { id: 'camera', label: 'Device Camera', desc: 'Scan barcode via camera button' },
                     { id: 'manual', label: 'Manual Key-in', desc: 'Type barcode numbers manually' },
                   ].map((option) => (
                     <button
                       key={option.id}
-                      onClick={() => handleUpdateInventoryMethod(option.id as ScanMethod)}
+                      onClick={() => setInventoryScanMethod(option.id as ScanMethod)}
                       className={`p-4 rounded-xl border text-left transition flex flex-col justify-between ${
                         inventoryScanMethod === option.id
                           ? 'bg-emerald-600/10 border-emerald-500 text-white'
@@ -795,7 +615,7 @@ export default function PosDashboard() {
         )}
       </main>
 
-      {/* Right Shopping Cart Panel */}
+      {/* Cart Summary Panel */}
       <aside className="w-96 bg-slate-950 border-l border-slate-800 flex flex-col justify-between p-6 print:hidden">
         <div>
           <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
@@ -853,7 +673,6 @@ export default function PosDashboard() {
           </div>
         </div>
 
-        {/* Checkout Controls */}
         <div className="border-t border-slate-800 pt-4 space-y-4">
           <div className="space-y-1.5 text-sm">
             <div className="flex justify-between text-slate-400">
@@ -887,7 +706,6 @@ export default function PosDashboard() {
             </div>
           </div>
 
-          {/* Dynamic Payment Input (Cash vs GCash) */}
           {paymentMethod === 'cash' && (
             <div className="space-y-2">
               <div className="relative">
@@ -939,40 +757,15 @@ export default function PosDashboard() {
         </div>
       </aside>
 
-      {/* Device Camera Scanner Modal */}
-      {isCameraOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl relative">
-            <button
-              onClick={() => setIsCameraOpen(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-lg transition"
-            >
-              <X size={20} />
-            </button>
-
-            <h3 className="text-md font-bold text-slate-100 mb-3 flex items-center gap-2">
-              <Camera size={18} className="text-blue-400" />
-              {cameraTarget === 'inventory' ? 'Scan Barcode for Inventory' : 'Camera Checkout Scanner'}
-            </h3>
-
-            <div className="relative bg-black rounded-xl overflow-hidden aspect-square flex items-center justify-center border border-slate-800">
-              <video ref={videoRef} className="w-full h-full object-cover" />
-              <div className="absolute inset-8 border-2 border-emerald-400/80 rounded-lg pointer-events-none animate-pulse" />
-            </div>
-
-            <p className="text-xs text-slate-400 text-center mt-3">
-              Point your camera directly at the item barcode.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Add / Edit Product Modal */}
+      {/* Add / Edit Product Modal with Embedded Scanner */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => {
+                setIsInlineScanning(false);
+                setIsModalOpen(false);
+              }}
               className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-lg transition"
             >
               <X size={20} />
@@ -1028,6 +821,7 @@ export default function PosDashboard() {
                 </div>
               </div>
 
+              {/* Barcode Section with Inline Live Camera Viewfinder */}
               <div>
                 <label className="text-xs font-semibold text-slate-400 block mb-1">
                   Barcode Number
@@ -1040,23 +834,51 @@ export default function PosDashboard() {
                     onChange={(e) => setFormBarcode(e.target.value)}
                     className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                   />
-                  {inventoryScanMethod === 'camera' && (
-                    <button
-                      type="button"
-                      onClick={() => openCameraScanner('inventory')}
-                      className="bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
-                      title="Scan via Camera"
-                    >
-                      <Camera size={16} /> Scan
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsInlineScanning((prev) => !prev)}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition border ${
+                      isInlineScanning
+                        ? 'bg-rose-600/20 text-rose-400 border-rose-500/30 hover:bg-rose-600 hover:text-white'
+                        : 'bg-blue-600/20 text-blue-400 border-blue-500/30 hover:bg-blue-600 hover:text-white'
+                    }`}
+                  >
+                    <Camera size={16} />
+                    {isInlineScanning ? 'Close' : 'Scan'}
+                  </button>
                 </div>
+
+                {/* Live Camera Viewfinder */}
+                {isInlineScanning && (
+                  <div className="mt-3 relative bg-black rounded-xl overflow-hidden aspect-video border-2 border-blue-500 shadow-inner flex flex-col items-center justify-center">
+                    <video
+                      ref={inlineVideoRef}
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-4 border-2 border-dashed border-emerald-400/80 rounded-lg pointer-events-none animate-pulse flex items-end justify-center pb-2">
+                      <span className="bg-slate-950/90 text-emerald-400 text-[10px] px-2 py-0.5 rounded font-mono border border-emerald-500/30">
+                        Point camera at item barcode
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {scannedFeedback && (
+                  <p className="text-[11px] text-emerald-400 mt-2 flex items-center gap-1 font-semibold bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg">
+                    <CheckCircle2 size={13} /> {scannedFeedback}
+                  </p>
+                )}
               </div>
 
               <div className="pt-2 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => {
+                    setIsInlineScanning(false);
+                    setIsModalOpen(false);
+                  }}
                   className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-xl text-sm font-semibold transition"
                 >
                   Cancel
@@ -1073,11 +895,38 @@ export default function PosDashboard() {
         </div>
       )}
 
-      {/* Printable Thermal Receipt Modal */}
+      {/* POS Terminal Overlay Camera Modal */}
+      {isPosCameraOpen && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[60] p-4 print:hidden">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl relative">
+            <button
+              onClick={() => setIsPosCameraOpen(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-lg transition"
+            >
+              <X size={20} />
+            </button>
+
+            <h3 className="text-md font-bold text-slate-100 mb-3 flex items-center gap-2">
+              <Camera size={18} className="text-blue-400" />
+              Camera Checkout Scanner
+            </h3>
+
+            <div className="relative bg-black rounded-xl overflow-hidden aspect-square flex items-center justify-center border border-slate-800">
+              <video ref={posVideoRef} playsInline muted className="w-full h-full object-cover" />
+              <div className="absolute inset-8 border-2 border-emerald-400/80 rounded-lg pointer-events-none animate-pulse" />
+            </div>
+
+            <p className="text-xs text-slate-400 text-center mt-3">
+              Point camera directly at the item barcode.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Printable Receipt Modal */}
       {receiptData && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:inset-auto print:block">
           <div className="bg-white text-black p-6 rounded-2xl w-full max-w-xs shadow-2xl font-mono text-xs print:shadow-none print:w-full print:max-w-none print:p-0">
-            {/* Store Header */}
             <div className="text-center pb-3 border-b border-dashed border-gray-400 space-y-1">
               <h2 className="font-bold text-base tracking-wider">PEDDLR STORE</h2>
               <p className="text-[10px] text-gray-600">Sari-Sari & Retail POS Terminal</p>
@@ -1085,7 +934,6 @@ export default function PosDashboard() {
               <p className="text-[10px] font-bold text-gray-700">{receiptData.id}</p>
             </div>
 
-            {/* Receipt Items */}
             <div className="py-3 border-b border-dashed border-gray-400 space-y-1.5">
               {receiptData.items.map((item) => (
                 <div key={item.id || item.barcode} className="flex justify-between items-start">
@@ -1102,7 +950,6 @@ export default function PosDashboard() {
               ))}
             </div>
 
-            {/* Receipt Totals */}
             <div className="py-3 border-b border-dashed border-gray-400 space-y-1">
               <div className="flex justify-between font-bold text-sm">
                 <span>TOTAL:</span>
@@ -1134,16 +981,14 @@ export default function PosDashboard() {
               )}
             </div>
 
-            {/* Receipt Footer */}
             <div className="text-center pt-3 text-[10px] text-gray-500 space-y-1">
               <p>Maraming Salamat Po!</p>
               <p>Please come again.</p>
             </div>
 
-            {/* Action Buttons (Hidden when printing) */}
             <div className="mt-5 flex gap-2 print:hidden">
               <button
-                onClick={handlePrintReceipt}
+                onClick={() => window.print()}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs"
               >
                 <Printer size={14} /> Print Receipt

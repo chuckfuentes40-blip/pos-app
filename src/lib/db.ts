@@ -1,23 +1,43 @@
 import Dexie, { Table } from 'dexie';
 
 export interface LocalProduct {
-  id?: string;
-  barcode: string;
+  id: string;
   name: string;
   price: number;
   stock: number;
-  synced?: boolean;
+  min_stock: number;
+  barcode?: string;
 }
 
-export class PosDatabase extends Dexie {
+export interface LocalSale {
+  id: string;
+  total_amount: number;
+  payment_method: string;
+  created_at: string;
+  items: { product_id: string; quantity: number; unit_price: number }[];
+  synced: boolean;
+}
+
+export interface SyncQueue {
+  id?: number;
+  action: 'CREATE_SALE' | 'UPDATE_STOCK';
+  payload: any;
+  timestamp: number;
+}
+
+class POSDatabase extends Dexie {
   products!: Table<LocalProduct>;
+  sales!: Table<LocalSale>;
+  syncQueue!: Table<SyncQueue>;
 
   constructor() {
-    super('PeddlrOfflineDB');
-    this.version(1).stores({
-      products: '++id, barcode, name, synced'
+    super('POSOfflineDB');
+    this.version(2).stores({
+      products: 'id, name, barcode, stock',
+      sales: 'id, created_at, synced',
+      syncQueue: '++id, timestamp'
     });
   }
 }
 
-export const db = new PosDatabase();
+export const db = new POSDatabase();

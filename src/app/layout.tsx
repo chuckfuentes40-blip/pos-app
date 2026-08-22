@@ -1,4 +1,5 @@
 import './globals.css';
+import SyncManager from '@/components/SyncManager';
 
 export const metadata = {
   title: 'Peddlr POS',
@@ -12,7 +13,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <SyncManager />
+        {children}
+      </body>
     </html>
   );
 }
