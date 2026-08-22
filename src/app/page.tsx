@@ -42,8 +42,8 @@ export interface Product {
   id: string;
   name: string;
   barcode: string;
-  price: number; // Selling Price (SRP)
-  cost: number; // Cost of Goods (Puhunan)
+  price: number;
+  cost: number;
   stock: number;
   lowStockLevel: number;
   unit: string;
@@ -62,7 +62,7 @@ export interface CustomerDetails {
 
 export interface SaleRecord {
   id: string;
-  timestamp: string; // ISO String
+  timestamp: string;
   items: CartItem[];
   grossSales: number;
   discount: number;
@@ -91,7 +91,6 @@ const initialProducts: Product[] = [
   { id: '6', name: 'Silver Swan Soy Sauce 200ml', barcode: '4800011000222', price: 19.00, cost: 14.50, stock: 15, lowStockLevel: 5, unit: 'pcs' },
 ];
 
-// Web Audio API Synthesized Barcode Beep
 const playScanBeep = () => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -121,12 +120,9 @@ export default function POSSystem() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Scanning Settings State
   const [posScanMethod, setPosScanMethod] = useState<ScanMethod>('hardware');
-  const [inventoryScanMethod, setInventoryScanMethod] = useState<ScanMethod>('camera');
   const [scanStatus, setScanStatus] = useState<'WAITING' | 'SCANNED'>('WAITING');
 
-  // Order Calculations & Extras State
   const [discount, setDiscount] = useState<number>(0);
   const [serviceFee, setServiceFee] = useState<number>(0);
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
@@ -135,11 +131,9 @@ export default function POSSystem() {
   const [gcashRefNumber, setGcashRefNumber] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Fee/Discount Active Modal State
   const [activeFeeModal, setActiveFeeModal] = useState<'discount' | 'service' | 'delivery' | null>(null);
   const [feeInputValue, setFeeInputValue] = useState<string>('');
 
-  // Customer Details Collapsible State
   const [showCustomerDetails, setShowCustomerDetails] = useState<boolean>(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerDetails>({
     name: '',
@@ -148,7 +142,6 @@ export default function POSSystem() {
     notes: '',
   });
 
-  // Product Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formName, setFormName] = useState('');
@@ -159,28 +152,22 @@ export default function POSSystem() {
   const [formUnit, setFormUnit] = useState('pcs');
   const [formBarcode, setFormBarcode] = useState('');
 
-  // Cameras & Scanner States
   const [isPosCameraOpen, setIsPosCameraOpen] = useState(false);
   const posVideoRef = useRef<HTMLVideoElement | null>(null);
   const [isInlineScanning, setIsInlineScanning] = useState(false);
   const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
-  const [scannedFeedback, setScannedFeedback] = useState<string | null>(null);
 
-  // Printable Receipt State
   const [receiptData, setReceiptData] = useState<SaleRecord | null>(null);
 
-  // Analytics Filter & Export State
   const [analyticsRange, setAnalyticsRange] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [showNetSalesBreakdown, setShowNetSalesBreakdown] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportTab, setExportTab] = useState<'sales' | 'movement' | 'capital'>('sales');
   const [exportEmail, setExportEmail] = useState('juan.delacruz@gmail.com');
 
-  // Scanner Hardware Buffer
   const barcodeBuffer = useRef<string>('');
   const lastKeyTime = useRef<number>(0);
 
-  // POS Calculations
   const grossSubtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [cart]
@@ -224,15 +211,11 @@ export default function POSSystem() {
 
       if (isModalOpen) {
         setFormBarcode(trimmedCode);
-        setScannedFeedback(`Scanned: ${trimmedCode}`);
         setIsInlineScanning(false);
-        setTimeout(() => setScannedFeedback(null), 3000);
       } else if (activeTab === 'pos') {
         const found = products.find((p) => p.barcode === trimmedCode);
         if (found) {
           addToCart(found);
-          setScannedFeedback(`Added ${found.name}`);
-          setTimeout(() => setScannedFeedback(null), 2000);
         } else {
           alert(`Product with barcode "${trimmedCode}" not found.`);
         }
@@ -241,7 +224,6 @@ export default function POSSystem() {
     [isModalOpen, activeTab, products, addToCart]
   );
 
-  // Hardware Scanner Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -266,109 +248,6 @@ export default function POSSystem() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleBarcodeScanned, isModalOpen]);
-
-  // Modal Camera Detector
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    let animFrameId: number;
-    let active = true;
-
-    if (isInlineScanning) {
-      navigator.mediaDevices
-        ?.getUserMedia({ video: { facingMode: 'environment' } })
-        .then((s) => {
-          if (!active) return;
-          stream = s;
-          if (inlineVideoRef.current) {
-            inlineVideoRef.current.srcObject = s;
-            inlineVideoRef.current.play();
-
-            if ('BarcodeDetector' in window) {
-              const detector = new (window as any).BarcodeDetector({
-                formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
-              });
-              const detect = async () => {
-                if (inlineVideoRef.current && inlineVideoRef.current.readyState === 4) {
-                  try {
-                    const barcodes = await detector.detect(inlineVideoRef.current);
-                    if (barcodes.length > 0 && active) {
-                      handleBarcodeScanned(barcodes[0].rawValue);
-                      return;
-                    }
-                  } catch (err) {
-                    console.error(err);
-                  }
-                }
-                if (active) animFrameId = requestAnimationFrame(detect);
-              };
-              animFrameId = requestAnimationFrame(detect);
-            }
-          }
-        })
-        .catch(() => {
-          alert('Could not open camera');
-          setIsInlineScanning(false);
-        });
-    }
-
-    return () => {
-      active = false;
-      if (animFrameId) cancelAnimationFrame(animFrameId);
-      if (stream) stream.getTracks().forEach((track) => track.stop());
-    };
-  }, [isInlineScanning, handleBarcodeScanned]);
-
-  // POS Overlay Camera Detector
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    let animFrameId: number;
-    let active = true;
-
-    if (isPosCameraOpen) {
-      navigator.mediaDevices
-        ?.getUserMedia({ video: { facingMode: 'environment' } })
-        .then((s) => {
-          if (!active) return;
-          stream = s;
-          if (posVideoRef.current) {
-            posVideoRef.current.srcObject = s;
-            posVideoRef.current.play();
-
-            if ('BarcodeDetector' in window) {
-              const detector = new (window as any).BarcodeDetector({
-                formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
-              });
-              const detect = async () => {
-                if (posVideoRef.current && posVideoRef.current.readyState === 4) {
-                  try {
-                    const barcodes = await detector.detect(posVideoRef.current);
-                    if (barcodes.length > 0 && active) {
-                      handleBarcodeScanned(barcodes[0].rawValue);
-                      setIsPosCameraOpen(false);
-                      return;
-                    }
-                  } catch (err) {
-                    console.error(err);
-                  }
-                }
-                if (active) animFrameId = requestAnimationFrame(detect);
-              };
-              animFrameId = requestAnimationFrame(detect);
-            }
-          }
-        })
-        .catch(() => {
-          alert('Could not open camera');
-          setIsPosCameraOpen(false);
-        });
-    }
-
-    return () => {
-      active = false;
-      if (animFrameId) cancelAnimationFrame(animFrameId);
-      if (stream) stream.getTracks().forEach((track) => track.stop());
-    };
-  }, [isPosCameraOpen, handleBarcodeScanned]);
 
   const openAddModal = () => {
     setEditingProduct(null);
@@ -449,7 +328,6 @@ export default function POSSystem() {
     setLoading(true);
 
     setTimeout(() => {
-      // Deduct Stock
       setProducts((prev) =>
         prev.map((p) => {
           const itemInCart = cart.find((c) => c.id === p.id || c.barcode === p.barcode);
@@ -481,7 +359,6 @@ export default function POSSystem() {
       setSalesHistory((prev) => [record, ...prev]);
       setReceiptData(record);
 
-      // Reset Form State
       setCart([]);
       setDiscount(0);
       setServiceFee(0);
@@ -494,7 +371,6 @@ export default function POSSystem() {
     }, 500);
   };
 
-  // Analytics Aggregation Logic
   const filteredSales = useMemo(() => {
     const now = new Date();
     return salesHistory.filter((sale) => {
@@ -651,7 +527,6 @@ export default function POSSystem() {
               )}
             </div>
 
-            {/* Product Grid */}
             <div className="flex-1 overflow-y-auto pr-1">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filteredProductsList.map((product) => (
@@ -761,10 +636,9 @@ export default function POSSystem() {
           </div>
         )}
 
-        {/* Analytics & Reports Tab (Peddlr Styled) */}
+        {/* Analytics & Reports Tab */}
         {activeTab === 'analytics' && (
           <div className="flex-1 p-6 overflow-y-auto max-w-5xl mx-auto w-full">
-            {/* Header & Date Range Filter */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-800">
               <div>
                 <h2 className="text-2xl font-black text-slate-100">Reports & Analytics</h2>
@@ -797,7 +671,6 @@ export default function POSSystem() {
               </div>
             </div>
 
-            {/* Top KPI Cards (Transaction Count & Avg Basket Size) */}
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-purple-900/30 border border-purple-800/40 p-4 rounded-2xl flex flex-col justify-between">
                 <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">
@@ -816,9 +689,7 @@ export default function POSSystem() {
               </div>
             </div>
 
-            {/* Peddlr Metric Rows (Net Sales, Cost of Goods, Margin, Expenses, Profit) */}
             <div className="space-y-3">
-              {/* Net Sales Row */}
               <div className="bg-purple-900/40 border border-purple-800/50 rounded-2xl overflow-hidden">
                 <div
                   onClick={() => setShowNetSalesBreakdown((prev) => !prev)}
@@ -837,7 +708,6 @@ export default function POSSystem() {
                   </span>
                 </div>
 
-                {/* Collapsible Net Sales Summary breakdown */}
                 {showNetSalesBreakdown && (
                   <div className="bg-slate-950/80 border-t border-purple-800/40 p-4 text-xs space-y-2 font-mono">
                     <p className="font-sans font-bold text-slate-300 mb-2">Summary Breakdown</p>
@@ -861,7 +731,6 @@ export default function POSSystem() {
                 )}
               </div>
 
-              {/* Cost of Product Sold (COPS) */}
               <div className="bg-purple-900/30 border border-purple-800/40 p-4 rounded-2xl flex items-center justify-between">
                 <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">
                   Cost of Product Sold (Puhunan)
@@ -871,7 +740,6 @@ export default function POSSystem() {
                 </span>
               </div>
 
-              {/* Gross Margin */}
               <div className="bg-purple-900/30 border border-purple-800/40 p-4 rounded-2xl flex items-center justify-between">
                 <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">
                   Margin (%)
@@ -881,7 +749,6 @@ export default function POSSystem() {
                 </span>
               </div>
 
-              {/* Profit Row */}
               <div className="bg-fuchsia-950/60 border border-fuchsia-800/60 p-5 rounded-2xl flex items-center justify-between shadow-lg shadow-fuchsia-950/30">
                 <span className="text-sm font-black text-fuchsia-300 uppercase tracking-wider">
                   ESTIMATED NET PROFIT
@@ -942,7 +809,7 @@ export default function POSSystem() {
         )}
       </main>
 
-      {/* Enhanced Order Summary Sidebar (Image 1 Peddlr Inspired) */}
+      {/* Order Summary Sidebar */}
       <aside className="w-96 bg-slate-950 border-l border-slate-800 flex flex-col justify-between p-5 print:hidden overflow-y-auto">
         <div className="space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -960,7 +827,6 @@ export default function POSSystem() {
             )}
           </div>
 
-          {/* Cart Table List */}
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
             {cart.length === 0 ? (
               <div className="text-center py-8 text-slate-600">
@@ -1000,13 +866,11 @@ export default function POSSystem() {
             )}
           </div>
 
-          {/* Grand Total Bar */}
           <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase">GRAND TOTAL:</span>
             <span className="text-2xl font-black text-emerald-400">₱{grandTotal.toFixed(2)}</span>
           </div>
 
-          {/* Quick Action Buttons Grid (Image 1 Peddlr Inspired) */}
           <div className="grid grid-cols-3 gap-1.5 text-[11px]">
             <button
               onClick={() => {
@@ -1049,7 +913,6 @@ export default function POSSystem() {
             </button>
           </div>
 
-          {/* Collapsible Customer's Details and Notes (Image 1 Peddlr) */}
           <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
             <button
               onClick={() => setShowCustomerDetails((prev) => !prev)}
@@ -1094,7 +957,6 @@ export default function POSSystem() {
           </div>
         </div>
 
-        {/* Payment & Checkout Trigger */}
         <div className="pt-3 border-t border-slate-800 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             {(['cash', 'gcash'] as const).map((method) => (
@@ -1182,7 +1044,7 @@ export default function POSSystem() {
         </div>
       )}
 
-      {/* Product Form Modal (Image 2 Peddlr Inspired) */}
+      {/* Product Form Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -1338,7 +1200,7 @@ export default function POSSystem() {
         </div>
       )}
 
-      {/* Export Report Modal (Peddlr Video Inspired) */}
+      {/* Export Report Modal */}
       {isExportModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
@@ -1351,7 +1213,6 @@ export default function POSSystem() {
 
             <h3 className="text-lg font-bold text-slate-100 mb-4">Export Analytics Report</h3>
 
-            {/* Export Tabs */}
             <div className="flex border-b border-slate-800 mb-4 text-xs font-bold">
               {[
                 { id: 'sales', label: 'SALES REPORT' },
@@ -1402,7 +1263,7 @@ export default function POSSystem() {
         </div>
       )}
 
-      {/* Printable Receipt Modal */}
+      {/* Printable Thermal Receipt Modal with Amount Received & Change */}
       {receiptData && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static">
           <div className="bg-white text-black p-6 rounded-2xl w-full max-w-xs shadow-2xl font-mono text-xs print:shadow-none print:w-full">
@@ -1426,15 +1287,54 @@ export default function POSSystem() {
               ))}
             </div>
 
+            {/* Calculations & Detailed Payment Section */}
             <div className="py-3 border-b border-dashed border-gray-400 space-y-1">
-              <div className="flex justify-between font-bold text-sm">
+              {receiptData.discount > 0 && (
+                <div className="flex justify-between text-gray-700">
+                  <span>DISCOUNT:</span>
+                  <span>-₱{receiptData.discount.toFixed(2)}</span>
+                </div>
+              )}
+              {receiptData.serviceFee > 0 && (
+                <div className="flex justify-between text-gray-700">
+                  <span>SERVICE FEE:</span>
+                  <span>+₱{receiptData.serviceFee.toFixed(2)}</span>
+                </div>
+              )}
+              {receiptData.deliveryFee > 0 && (
+                <div className="flex justify-between text-gray-700">
+                  <span>DELIVERY FEE:</span>
+                  <span>+₱{receiptData.deliveryFee.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-sm pt-1">
                 <span>TOTAL:</span>
                 <span>₱{receiptData.netSales.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-gray-700 uppercase">
-                <span>Payment Mode:</span>
-                <span>{receiptData.paymentMethod}</span>
+              <div className="flex justify-between text-gray-700 uppercase pt-1">
+                <span>PAYMENT MODE:</span>
+                <span className="font-bold">{receiptData.paymentMethod}</span>
               </div>
+
+              {receiptData.paymentMethod === 'cash' && (
+                <>
+                  <div className="flex justify-between text-gray-700 uppercase">
+                    <span>AMOUNT RECEIVED:</span>
+                    <span>₱{(receiptData.cashReceived || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-800 uppercase font-bold">
+                    <span>CHANGE:</span>
+                    <span>₱{(receiptData.changeDue || 0).toFixed(2)}</span>
+                  </div>
+                </>
+              )}
+
+              {receiptData.paymentMethod === 'gcash' && receiptData.gcashRefNumber && (
+                <div className="flex justify-between text-gray-700 uppercase">
+                  <span>REF NO:</span>
+                  <span>{receiptData.gcashRefNumber}</span>
+                </div>
+              )}
             </div>
 
             {receiptData.customer && (
@@ -1442,6 +1342,8 @@ export default function POSSystem() {
                 <p className="font-bold">Customer Info:</p>
                 {receiptData.customer.name && <p>Name: {receiptData.customer.name}</p>}
                 {receiptData.customer.phone && <p>Phone: {receiptData.customer.phone}</p>}
+                {receiptData.customer.address && <p>Address: {receiptData.customer.address}</p>}
+                {receiptData.customer.notes && <p>Notes: {receiptData.customer.notes}</p>}
               </div>
             )}
 
