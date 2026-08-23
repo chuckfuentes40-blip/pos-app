@@ -224,6 +224,78 @@ export default function POSSystem() {
     [isModalOpen, activeTab, products, addToCart]
   );
 
+  // Add declaration at the top of your file to prevent TypeScript errors
+declare global {
+  interface Window {
+    BarcodeDetector?: any;
+  }
+}
+
+// Add this frame-detection hook inside your POS component
+useEffect(() => {
+  if (!isScannerOpen || !posVideoRef.current) return;
+
+  let animationFrameId: number;
+  let detector: any = null;
+
+  // Initialize native BarcodeDetector (Supported in Chrome/WebView Android)
+  if ('BarcodeDetector' in window) {
+    try {
+      detector = new window.BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
+      });
+    } catch (e) {
+      console.error('BarcodeDetector initialization failed:', e);
+    }
+  } else {
+    console.warn('Native BarcodeDetector API is not supported in this browser.');
+  }
+
+  let isProcessingFrame = false;
+
+  const scanVideoFrame = async () => {
+    if (posVideoRef.current && detector && posVideoRef.current.readyState === 4) {
+      if (!isProcessingFrame) {
+        isProcessingFrame = true;
+        try {
+          const barcodes = await detector.detect(posVideoRef.current);
+          if (barcodes.length > 0 && barcodes[0].rawValue) {
+            const scannedCode = barcodes[0].rawValue.trim();
+            
+            // Audio beep confirmation
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            osc.connect(audioCtx.destination);
+            osc.frequency.value = 1040;
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+
+            // Execute item scan logic
+            handleBarcodeScanned(scannedCode);
+
+            // Close scanner upon successful match
+            closeScanner();
+            return;
+          }
+        } catch (err) {
+          console.error('Frame scan error:', err);
+        } finally {
+          isProcessingFrame = false;
+        }
+      }
+    }
+    animationFrameId = requestAnimationFrame(scanVideoFrame);
+  };
+
+  if (detector) {
+    animationFrameId = requestAnimationFrame(scanVideoFrame);
+  }
+
+  return () => {
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+  };
+}, [isScannerOpen, handleBarcodeScanned, closeScanner]);
+
   // Keyboard barcode scanner listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
