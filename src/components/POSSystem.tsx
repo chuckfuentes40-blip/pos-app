@@ -812,48 +812,66 @@ export default function POSSystem() {
                 )}
               </div>
 
-              {/* Product Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 pb-4">
-                {filteredProductsList.map((product) => (
-                  <div
-                    key={product.id}
-                    onClick={() => addToCart(product)}
-                    className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 p-3 sm:p-4 rounded-2xl flex flex-col justify-between cursor-pointer transition group hover:shadow-lg hover:shadow-fuchsia-900/10 w-full min-w-0"
-                  >
-                    <div>
-                      <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
-                        <span className="text-[10px] font-mono text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 truncate max-w-[90px]">
-                          {product.barcode || 'NO CODE'}
+              {/* Product Grid Area */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 auto-rows-fr">
+                  {filteredProducts.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => addToCart(item)}
+                      className="group relative flex flex-col justify-between p-3.5 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800/80 hover:border-purple-500/50 rounded-xl transition-all duration-200 cursor-pointer overflow-hidden shadow-sm hover:shadow-purple-500/10"
+                    >
+                      {/* Top Header: Clean In-Flow Barcode & Stock Badges */}
+                      <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                        <span className="text-[10px] font-mono bg-slate-800/90 text-slate-400 px-2 py-0.5 rounded border border-slate-700/50 truncate max-w-[65%]">
+                          {item.barcode || 'NO-BARCODE'}
                         </span>
-                        <span
-                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
-                            product.stock <= product.lowStockLevel
-                              ? 'bg-rose-950 text-rose-400 border border-rose-800/40'
-                              : 'bg-slate-800 text-slate-300'
-                          }`}
+                        
+                        {item.stock !== undefined && (
+                          <span
+                            className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 border ${
+                              item.stock <= 5
+                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                : 'bg-slate-800 text-slate-400 border-slate-700/50'
+                            }`}
+                          >
+                            {item.stock} left
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Product Title */}
+                      <div className="mb-3">
+                        <h3 className="font-medium text-slate-200 text-xs sm:text-sm leading-snug line-clamp-2 group-hover:text-purple-300 transition-colors">
+                          {item.name}
+                        </h3>
+                      </div>
+
+                      {/* Price & Quick Add Button */}
+                      <div className="flex items-end justify-between pt-2 border-t border-slate-800/80 mt-auto">
+                        <div>
+                          <div className="text-emerald-400 font-bold text-sm sm:text-base">
+                            ₱{item.price.toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            Cost: ₱{item.costPrice ? item.costPrice.toFixed(2) : '0.00'}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToCart(item);
+                          }}
+                          className="p-1.5 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white rounded-lg transition-colors flex items-center justify-center shrink-0 ml-1"
+                          title="Add to Cart"
                         >
-                          {product.stock} left
-                        </span>
+                          <Plus className="w-4 h-4" />
+                        </button>
                       </div>
-                      <h3 className="font-semibold text-xs text-slate-200 group-hover:text-white transition line-clamp-2 min-h-[32px]">
-                        {product.name}
-                      </h3>
                     </div>
-                    <div className="mt-3 flex items-end justify-between gap-1">
-                      <div className="min-w-0">
-                        <span className="text-sm font-bold text-emerald-400 block truncate">
-                          ₱{product.price.toFixed(2)}
-                        </span>
-                        <span className="text-[10px] text-slate-500 block truncate">
-                          Cost: ₱{product.cost.toFixed(2)}
-                        </span>
-                      </div>
-                      <span className="p-1.5 bg-fuchsia-600/10 text-fuchsia-400 group-hover:bg-fuchsia-600 group-hover:text-white rounded-lg transition flex-shrink-0">
-                        <Plus size={14} />
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
 
