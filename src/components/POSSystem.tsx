@@ -812,65 +812,76 @@ export default function POSSystem() {
                 )}
               </div>
 
-              {/* Product Grid Area */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 auto-rows-fr">
-                  {filteredProducts.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => addToCart(item)}
-                      className="group relative flex flex-col justify-between p-3.5 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800/80 hover:border-purple-500/50 rounded-xl transition-all duration-200 cursor-pointer overflow-hidden shadow-sm hover:shadow-purple-500/10"
-                    >
-                      {/* Top Header: Clean In-Flow Barcode & Stock Badges */}
-                      <div className="flex items-center justify-between gap-1.5 mb-2.5">
-                        <span className="text-[10px] font-mono bg-slate-800/90 text-slate-400 px-2 py-0.5 rounded border border-slate-700/50 truncate max-w-[65%]">
-                          {item.barcode || 'NO-BARCODE'}
-                        </span>
-                        
-                        {item.stock !== undefined && (
-                          <span
-                            className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 border ${
-                              item.stock <= 5
-                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                                : 'bg-slate-800 text-slate-400 border-slate-700/50'
-                            }`}
-                          >
-                            {item.stock} left
+             {/* Middle Container: Product Catalog */}
+              <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-slate-950 p-3 sm:p-4">
+                
+                {/* Search Bar Container */}
+                <div className="mb-3 shrink-0">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search item name or barcode..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Product Grid Area (Vertical Scroll Only) */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                    {filteredProducts.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => addToCart(item)}
+                        className="bg-slate-900/90 border border-slate-800 hover:border-purple-500/60 rounded-xl p-3 flex flex-col justify-between cursor-pointer transition-all hover:bg-slate-800/80 min-h-[140px]"
+                      >
+                        {/* Top Row: Clean In-Flow Barcode & Stock */}
+                        <div className="flex items-center justify-between gap-1.5 mb-2 w-full">
+                          <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/50 truncate max-w-[65%]">
+                            {item.barcode || 'NO-BARCODE'}
                           </span>
-                        )}
-                      </div>
-
-                      {/* Product Title */}
-                      <div className="mb-3">
-                        <h3 className="font-medium text-slate-200 text-xs sm:text-sm leading-snug line-clamp-2 group-hover:text-purple-300 transition-colors">
-                          {item.name}
-                        </h3>
-                      </div>
-
-                      {/* Price & Quick Add Button */}
-                      <div className="flex items-end justify-between pt-2 border-t border-slate-800/80 mt-auto">
-                        <div>
-                          <div className="text-emerald-400 font-bold text-sm sm:text-base">
-                            ₱{item.price.toFixed(2)}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            Cost: ₱{item.costPrice ? item.costPrice.toFixed(2) : '0.00'}
-                          </div>
+                          
+                          {item.stock !== undefined && (
+                            <span className="text-[10px] font-medium text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/50 shrink-0">
+                              {item.stock} left
+                            </span>
+                          )}
                         </div>
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addToCart(item);
-                          }}
-                          className="p-1.5 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white rounded-lg transition-colors flex items-center justify-center shrink-0 ml-1"
-                          title="Add to Cart"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
+                        {/* Product Title */}
+                        <div className="mb-2">
+                          <h3 className="font-medium text-slate-200 text-xs sm:text-sm leading-tight line-clamp-2">
+                            {item.name}
+                          </h3>
+                        </div>
+
+                        {/* Price & Add Button */}
+                        <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-800/80">
+                          <div>
+                            <div className="text-emerald-400 font-bold text-xs sm:text-sm">
+                              ₱{item.price.toFixed(2)}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              Cost: ₱{item.costPrice ? item.costPrice.toFixed(2) : '0.00'}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addToCart(item);
+                            }}
+                            className="p-1.5 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white rounded-lg transition-colors shrink-0 ml-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
