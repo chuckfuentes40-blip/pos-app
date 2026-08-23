@@ -38,6 +38,12 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 
+declare global {
+  interface Window {
+    BarcodeDetector?: any;
+  }
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -224,79 +230,7 @@ export default function POSSystem() {
     [isModalOpen, activeTab, products, addToCart]
   );
 
-  // Add declaration at the top of your file to prevent TypeScript errors
-declare global {
-  interface Window {
-    BarcodeDetector?: any;
-  }
-}
-
-// Add this frame-detection hook inside your POS component
-useEffect(() => {
-  if (!isScannerOpen || !posVideoRef.current) return;
-
-  let animationFrameId: number;
-  let detector: any = null;
-
-  // Initialize native BarcodeDetector (Supported in Chrome/WebView Android)
-  if ('BarcodeDetector' in window) {
-    try {
-      detector = new window.BarcodeDetector({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
-      });
-    } catch (e) {
-      console.error('BarcodeDetector initialization failed:', e);
-    }
-  } else {
-    console.warn('Native BarcodeDetector API is not supported in this browser.');
-  }
-
-  let isProcessingFrame = false;
-
-  const scanVideoFrame = async () => {
-    if (posVideoRef.current && detector && posVideoRef.current.readyState === 4) {
-      if (!isProcessingFrame) {
-        isProcessingFrame = true;
-        try {
-          const barcodes = await detector.detect(posVideoRef.current);
-          if (barcodes.length > 0 && barcodes[0].rawValue) {
-            const scannedCode = barcodes[0].rawValue.trim();
-            
-            // Audio beep confirmation
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const osc = audioCtx.createOscillator();
-            osc.connect(audioCtx.destination);
-            osc.frequency.value = 1040;
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.1);
-
-            // Execute item scan logic
-            handleBarcodeScanned(scannedCode);
-
-            // Close scanner upon successful match
-            closeScanner();
-            return;
-          }
-        } catch (err) {
-          console.error('Frame scan error:', err);
-        } finally {
-          isProcessingFrame = false;
-        }
-      }
-    }
-    animationFrameId = requestAnimationFrame(scanVideoFrame);
-  };
-
-  if (detector) {
-    animationFrameId = requestAnimationFrame(scanVideoFrame);
-  }
-
-  return () => {
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-  };
-}, [isScannerOpen, handleBarcodeScanned, closeScanner]);
-
-  // Keyboard barcode scanner listener
+  // Hardware keyboard barcode scanner listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -357,6 +291,58 @@ useEffect(() => {
     };
   }, [isPosCameraOpen]);
 
+  // POS Camera Frame Analyzer (Android Native Detector)
+  useEffect(() => {
+    if (!isPosCameraOpen || !posVideoRef.current) return;
+
+    let animationFrameId: number;
+    let detector: any = null;
+
+    if ('BarcodeDetector' in window) {
+      try {
+        detector = new window.BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
+        });
+      } catch (e) {
+        console.error('BarcodeDetector initialization error:', e);
+      }
+    } else {
+      console.warn('BarcodeDetector API is not supported in this browser environment.');
+    }
+
+    let isProcessing = false;
+
+    const detectFrame = async () => {
+      if (posVideoRef.current && detector && posVideoRef.current.readyState === 4 && !isProcessing) {
+        isProcessing = true;
+        try {
+          const barcodes = await detector.detect(posVideoRef.current);
+          if (barcodes && barcodes.length > 0) {
+            const code = barcodes[0].rawValue;
+            if (code) {
+              handleBarcodeScanned(code);
+              setIsPosCameraOpen(false);
+              return;
+            }
+          }
+        } catch (err) {
+          // Frame analysis error catch
+        } finally {
+          isProcessing = false;
+        }
+      }
+      animationFrameId = requestAnimationFrame(detectFrame);
+    };
+
+    if (detector) {
+      animationFrameId = requestAnimationFrame(detectFrame);
+    }
+
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    };
+  }, [isPosCameraOpen, handleBarcodeScanned]);
+
   // Camera initialization for Product Form scanner
   useEffect(() => {
     let activeStream: MediaStream | null = null;
@@ -391,6 +377,56 @@ useEffect(() => {
       }
     };
   }, [isInlineScanning]);
+
+  // Product Form Camera Frame Analyzer
+  useEffect(() => {
+    if (!isInlineScanning || !inlineVideoRef.current) return;
+
+    let animationFrameId: number;
+    let detector: any = null;
+
+    if ('BarcodeDetector' in window) {
+      try {
+        detector = new window.BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
+        });
+      } catch (e) {
+        console.error('BarcodeDetector initialization error:', e);
+      }
+    }
+
+    let isProcessing = false;
+
+    const detectFrame = async () => {
+      if (inlineVideoRef.current && detector && inlineVideoRef.current.readyState === 4 && !isProcessing) {
+        isProcessing = true;
+        try {
+          const barcodes = await detector.detect(inlineVideoRef.current);
+          if (barcodes && barcodes.length > 0) {
+            const code = barcodes[0].rawValue;
+            if (code) {
+              handleBarcodeScanned(code);
+              setIsInlineScanning(false);
+              return;
+            }
+          }
+        } catch (err) {
+          // Frame analysis error catch
+        } finally {
+          isProcessing = false;
+        }
+      }
+      animationFrameId = requestAnimationFrame(detectFrame);
+    };
+
+    if (detector) {
+      animationFrameId = requestAnimationFrame(detectFrame);
+    }
+
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    };
+  }, [isInlineScanning, handleBarcodeScanned]);
 
   const openAddModal = () => {
     setEditingProduct(null);
@@ -1421,7 +1457,7 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Printable Thermal Receipt Modal with Amount Received & Change */}
+      {/* Printable Thermal Receipt Modal */}
       {receiptData && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static">
           <div className="bg-white text-black p-6 rounded-2xl w-full max-w-xs shadow-2xl font-mono text-xs print:shadow-none print:w-full">
@@ -1445,7 +1481,6 @@ useEffect(() => {
               ))}
             </div>
 
-            {/* Calculations & Detailed Payment Section */}
             <div className="py-3 border-b border-dashed border-gray-400 space-y-1">
               {receiptData.discount > 0 && (
                 <div className="flex justify-between text-gray-700">
