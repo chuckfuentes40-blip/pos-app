@@ -1,0 +1,22 @@
+{
+  "name": "PEDDLR POS Terminal",
+  "short_name": "PEDDLR POS",
+  "description": "Responsive Retail & Inventory Management System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#c026d3",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
