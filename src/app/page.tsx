@@ -224,6 +224,7 @@ export default function POSSystem() {
     [isModalOpen, activeTab, products, addToCart]
   );
 
+  // Keyboard barcode scanner listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -248,6 +249,76 @@ export default function POSSystem() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleBarcodeScanned, isModalOpen]);
+
+  // Camera initialization for POS Terminal overlay
+  useEffect(() => {
+    let activeStream: MediaStream | null = null;
+
+    if (isPosCameraOpen && posVideoRef.current) {
+      navigator.mediaDevices
+        .getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        })
+        .catch(() => navigator.mediaDevices.getUserMedia({ video: true }))
+        .then((stream) => {
+          if (!stream) return;
+          activeStream = stream;
+          if (posVideoRef.current) {
+            posVideoRef.current.srcObject = stream;
+            posVideoRef.current.play().catch((err) => console.error('Play error:', err));
+          }
+        })
+        .catch((err) => {
+          console.error('Camera access error:', err);
+          alert('Unable to access camera. Please check tablet camera permissions.');
+        });
+    }
+
+    return () => {
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [isPosCameraOpen]);
+
+  // Camera initialization for Product Form scanner
+  useEffect(() => {
+    let activeStream: MediaStream | null = null;
+
+    if (isInlineScanning && inlineVideoRef.current) {
+      navigator.mediaDevices
+        .getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        })
+        .catch(() => navigator.mediaDevices.getUserMedia({ video: true }))
+        .then((stream) => {
+          if (!stream) return;
+          activeStream = stream;
+          if (inlineVideoRef.current) {
+            inlineVideoRef.current.srcObject = stream;
+            inlineVideoRef.current.play().catch((err) => console.error('Play error:', err));
+          }
+        })
+        .catch((err) => {
+          console.error('Inline camera error:', err);
+          alert('Unable to access camera. Please check tablet camera permissions.');
+        });
+    }
+
+    return () => {
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [isInlineScanning]);
 
   const openAddModal = () => {
     setEditingProduct(null);
@@ -416,12 +487,15 @@ export default function POSSystem() {
   }, [filteredSales]);
 
   const inventoryCapital = useMemo(() => {
-    return products.reduce((acc, p) => {
-      acc.totalCost += p.cost * p.stock;
-      acc.totalSRP += p.price * p.stock;
-      acc.totalItems += p.stock;
-      return acc;
-    }, { totalCost: 0, totalSRP: 0, totalItems: 0 });
+    return products.reduce(
+      (acc, p) => {
+        acc.totalCost += p.cost * p.stock;
+        acc.totalSRP += p.price * p.stock;
+        acc.totalItems += p.stock;
+        return acc;
+      },
+      { totalCost: 0, totalSRP: 0, totalItems: 0 }
+    );
   }, [products]);
 
   const filteredProductsList = products.filter(
@@ -438,7 +512,7 @@ export default function POSSystem() {
               <Store size={22} />
             </div>
             <div>
-              <h1 className="font-bold text-base leading-tight">PEDDLR POS</h1>
+              <h1 className="font-bold text-base leading-tight">PEDDLR STORE</h1>
               <p className="text-[11px] text-slate-400">Retail & Analytics</p>
             </div>
           </div>
@@ -1163,7 +1237,13 @@ export default function POSSystem() {
 
                 {isInlineScanning && (
                   <div className="mt-3 bg-black rounded-xl overflow-hidden aspect-video border-2 border-fuchsia-500 flex items-center justify-center relative">
-                    <video ref={inlineVideoRef} playsInline muted className="w-full h-full object-cover" />
+                    <video
+                      ref={inlineVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 )}
               </div>
@@ -1193,7 +1273,13 @@ export default function POSSystem() {
               <Camera size={18} className="text-fuchsia-400" /> Camera Scanner
             </h3>
             <div className="relative bg-black rounded-xl overflow-hidden aspect-square border border-slate-800">
-              <video ref={posVideoRef} playsInline muted className="w-full h-full object-cover" />
+              <video
+                ref={posVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
               <div className="absolute inset-8 border-2 border-emerald-400/80 rounded-lg pointer-events-none animate-pulse" />
             </div>
           </div>
