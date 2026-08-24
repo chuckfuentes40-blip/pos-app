@@ -631,23 +631,6 @@ const handleDeleteProduct = (id: string) => {
                       <span className="hidden sm:inline">Camera Scan</span>
                     </button>
                   </div>
-
-                  {/* Category Pills */}
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                    {categories.map((cat) => (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedCategory(cat)}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                          selectedCategory === cat
-                            ? 'bg-fuchsia-600 text-white'
-                            : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 {/* Product Grid */}
