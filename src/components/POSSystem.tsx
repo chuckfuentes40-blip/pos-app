@@ -192,6 +192,42 @@ export default function POSSystem() {
   // Video scanner refs
   const posVideoRef = useRef<HTMLVideoElement | null>(null);
   const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
+useEffect(() => {
+  const loadProducts = async () => {
+    try {
+      // 1. Try fetching live data from Supabase
+      if (navigator.onLine) {
+        const { data, error } = await supabase.from('products').select('*');
+
+        if (!error && data) {
+          setProducts(data);
+
+          // Cache in local Dexie database for offline use
+          const dexieFormat = data.map((p) => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            stock: p.stock,
+            min_stock: p.lowStockThreshold || p.min_stock,
+            barcode: p.barcode,
+          }));
+          await db.products.bulkPut(dexieFormat);
+          return;
+        }
+      }
+
+      // 2. Fallback to Dexie IndexedDB if offline or Supabase fails
+      const localItems = await db.products.toArray();
+      if (localItems.length > 0) {
+        setProducts(localItems as any);
+      }
+    } catch (err) {
+      console.error('Error loading products:', err);
+    }
+  };
+
+  loadProducts();
+}, []);
 
 // Load persisted products from LocalStorage on mount
 useEffect(() => {
@@ -352,44 +388,59 @@ useEffect(() => {
     setIsModalOpen(true);
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+ import { supabase } from './supabase'; // Ensure supabase is imported
+import { db } from './db';             // Ensure db is imported
+
+const handleSaveProduct = async (e: React.FormEvent) => {
   e.preventDefault();
 
-  try {
-    const newProduct: Product = {
-      id: editingProduct ? editingProduct.id : Date.now().toString(),
-      name: formName,
-      price: parseFloat(formPrice) || 0,
-      cost: parseFloat(formCost) || 0,
-      stock: parseInt(formStock) || 0,
-      lowStockThreshold: parseInt(formLowStock) || 5,
-      unit: formUnit,
-      barcode: formBarcode || Date.now().toString(),
-      category: 'General'
-    };
+  const productData = {
+    id: editingProduct ? editingProduct.id : crypto.randomUUID(),
+    name: formName,
+    price: parseFloat(formPrice) || 0,
+    cost: parseFloat(formCost) || 0,
+    stock: parseInt(formStock) || 0,
+    lowStockThreshold: parseInt(formLowStock) || 5,
+    unit: formUnit,
+    barcode: formBarcode || Date.now().toString(),
+    category: 'General',
+  };
 
-    let updatedProducts: Product[];
-    if (editingProduct) {
-      updatedProducts = products.map((p) => (p.id === editingProduct.id ? newProduct : p));
-    } else {
-      updatedProducts = [newProduct, ...products];
+  try {
+    // 1. Upload/Update in Supabase if online
+    if (navigator.onLine) {
+      const { error } = await supabase
+        .from('products')
+        .upsert([productData]);
+
+      if (error) throw error;
     }
 
-    // 1. Update State
-    setProducts(updatedProducts);
+    // 2. Save to local Dexie IndexedDB (for offline speed)
+    await db.products.put({
+      id: productData.id,
+      name: productData.name,
+      price: productData.price,
+      stock: productData.stock,
+      min_stock: productData.lowStockThreshold,
+      barcode: productData.barcode,
+    });
 
-    // 2. Persist to LocalStorage
-    localStorage.setItem('pos_products', JSON.stringify(updatedProducts));
+    // 3. Update React State
+    if (editingProduct) {
+      setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? productData : p)));
+    } else {
+      setProducts((prev) => [productData, ...prev]);
+    }
 
-    // 3. Close Modals
+    // 4. Close Modals & Notify
     setIsModalOpen(false);
     setIsInlineScanning(false);
+    alert(`Product "${formName}" saved successfully across all devices!`);
 
-    // 4. Success Notification
-    alert(`Success! Product "${formName}" has been ${editingProduct ? 'updated' : 'added'}.`);
-  } catch (err) {
-    console.error('Save product error:', err);
-    alert('Failed to save product. Please try again.');
+  } catch (err: any) {
+    console.error('Error saving product to Supabase:', err);
+    alert(`Failed to save product: ${err.message || 'Check network connection'}`);
   }
 };
 
