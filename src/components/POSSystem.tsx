@@ -1539,10 +1539,10 @@ const handleDeleteProduct = (id: string) => {
         </div>
       )}
 
-   {/* Printable Receipt Modal */}
+{/* Printable Receipt Modal */}
 {receiptData && (
   <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block">
-    {/* Embedded Print stylesheet specifically calibrated for 58mm Thermal Printers */}
+    {/* CSS specifically tuned for 58mm Thermal Printers (48mm printable area) */}
     <style>{`
       @media print {
         @page {
@@ -1555,31 +1555,33 @@ const handleDeleteProduct = (id: string) => {
           padding: 0 !important;
           background: #ffffff !important;
           color: #000000 !important;
-          overflow: visible !important;
         }
-        body * {
-          visibility: hidden !important;
+        body {
+          visibility: hidden;
         }
         #printable-receipt, #printable-receipt * {
-          visibility: visible !important;
+          visibility: visible;
         }
         #printable-receipt {
           position: absolute !important;
           left: 0 !important;
           top: 0 !important;
-          width: 100% !important;
-          max-width: 58mm !important;
-          padding: 2mm 3mm !important;
-          margin: 0 !important;
+          width: 48mm !important;
+          max-width: 48mm !important;
+          padding: 2mm 0 !important;
+          margin: 0 auto !important;
           box-sizing: border-box !important;
           box-shadow: none !important;
+        }
+        .print\\:hidden {
+          display: none !important;
         }
       }
     `}</style>
 
     <div
       id="printable-receipt"
-      className="bg-white text-black p-4 rounded-2xl w-full max-w-[280px] shadow-2xl font-mono text-[11px] leading-tight print:shadow-none print:w-full print:max-w-[58mm] print:rounded-none print:text-black print:p-1 mx-auto"
+      className="bg-white text-black p-4 rounded-2xl w-full max-w-[280px] shadow-2xl font-mono text-[11px] leading-tight print:shadow-none print:w-[48mm] print:max-w-[48mm] print:rounded-none print:text-black print:p-0 mx-auto"
     >
       {/* Header */}
       <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
