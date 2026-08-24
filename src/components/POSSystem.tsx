@@ -1304,7 +1304,20 @@ export default function POSSystem() {
         isOpen={isPosCameraOpen}
         onClose={() => setIsPosCameraOpen(false)}
         onScan={(scannedBarcode) => {
-          setSearchQuery(scannedBarcode);
+          // 1. Find the matching product in your products list
+          const foundProduct = products.find(
+            (product) => product.barcode === scannedBarcode || product.id === scannedBarcode
+          );
+
+          if (foundProduct) {
+            // 2. Automatically add the product to the shopping cart
+            addToCart(foundProduct); // Replace with your actual cart function name if different
+          } else {
+            // 3. Fallback: If product isn't found, populate search bar so you can see what failed
+            setSearchQuery(scannedBarcode);
+            alert(`No product found with barcode: ${scannedBarcode}`);
+          }
+
           setIsPosCameraOpen(false);
         }}
       />
