@@ -1539,34 +1539,67 @@ const handleDeleteProduct = (id: string) => {
         </div>
       )}
 
-      {/* Printable Receipt Modal */}
+     {/* Printable Receipt Modal */}
       {receiptData && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block">
-          <div className="bg-white text-black p-4 sm:p-5 rounded-2xl w-full max-w-xs shadow-2xl font-mono text-xs print:shadow-none print:w-full print:max-w-[80mm] print:p-2 print:rounded-none print:m-0 print:text-black">
-            
-            {/* Receipt Top Header with Logo */}
-            <div className="text-center pb-3 border-b border-dashed border-gray-400 space-y-1">
+          {/* Embedded Print stylesheet specifically for 58mm Thermal Printers */}
+          <style>{`
+            @media print {
+              @page {
+                size: 58mm auto;
+                margin: 0mm;
+              }
+              body {
+                background: #ffffff !important;
+                color: #000000 !important;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              #printable-receipt, #printable-receipt * {
+                visibility: visible !important;
+              }
+              #printable-receipt {
+                position: absolute !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                top: 0 !important;
+                width: 58mm !important;
+                max-width: 58mm !important;
+                padding: 2mm 1mm !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+              }
+            }
+          `}</style>
+
+          <div
+            id="printable-receipt"
+            className="bg-white text-black p-4 rounded-2xl w-full max-w-[280px] shadow-2xl font-mono text-[11px] leading-tight print:shadow-none print:w-[58mm] print:max-w-[58mm] print:rounded-none print:text-black print:p-1 mx-auto"
+          >
+            {/* Header */}
+            <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
               <img
                 src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/main/Inaki.png"
                 alt="IÑAKI Logo"
-                className="h-10 w-10 mx-auto rounded-lg object-cover mb-1 border border-gray-200 print:border-none"
+                className="h-8 w-8 mx-auto rounded-lg object-cover mb-1 border border-gray-200 print:border-none"
               />
-              <h2 className="font-extrabold text-sm tracking-wider uppercase">IÑAKI SARI-SARI STORE</h2>
-              <p className="text-[10px] text-gray-500">{new Date(receiptData.timestamp).toLocaleString('en-PH')}</p>
-              <p className="text-[10px] font-bold text-gray-700">Receipt #: {receiptData.id}</p>
+              <h2 className="font-extrabold text-xs tracking-wider uppercase">IÑAKI STORE</h2>
+              <p className="text-[9px] text-gray-500">{new Date(receiptData.timestamp).toLocaleString('en-PH')}</p>
+              <p className="text-[9px] font-bold text-gray-700">Receipt #: {receiptData.id}</p>
             </div>
 
-            {/* Items List */}
-            <div className="py-3 border-b border-dashed border-gray-400 space-y-1.5">
+            {/* Item List */}
+            <div className="py-2 border-b border-dashed border-gray-400 space-y-1">
               {receiptData.items.map((item) => (
                 <div key={item.id} className="flex justify-between items-start">
-                  <div className="pr-2 min-w-0 flex-1">
-                    <p className="font-semibold truncate">{item.name}</p>
-                    <p className="text-[10px] text-gray-600">
+                  <div className="pr-1 min-w-0 flex-1">
+                    <p className="font-semibold truncate text-[10px]">{item.name}</p>
+                    <p className="text-[9px] text-gray-600">
                       {item.quantity} x ₱{item.price.toFixed(2)}
                     </p>
                   </div>
-                  <span className="font-bold whitespace-nowrap">
+                  <span className="font-bold whitespace-nowrap text-[10px]">
                     ₱{(item.price * item.quantity).toFixed(2)}
                   </span>
                 </div>
@@ -1574,7 +1607,7 @@ const handleDeleteProduct = (id: string) => {
             </div>
 
             {/* Fees & Summary */}
-            <div className="py-3 border-b border-dashed border-gray-400 space-y-1">
+            <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
               {receiptData.discount > 0 && (
                 <div className="flex justify-between text-gray-700">
                   <span>DISCOUNT:</span>
@@ -1593,22 +1626,22 @@ const handleDeleteProduct = (id: string) => {
                   <span>+₱{receiptData.deliveryFee.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-bold text-sm pt-1">
+              <div className="flex justify-between font-bold text-xs pt-0.5">
                 <span>TOTAL:</span>
                 <span>₱{receiptData.netSales.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-gray-700 uppercase pt-1">
-                <span>PAYMENT MODE:</span>
+              <div className="flex justify-between text-gray-700 uppercase pt-0.5 text-[9px]">
+                <span>PAYMENT:</span>
                 <span className="font-bold">{receiptData.paymentMethod}</span>
               </div>
 
               {receiptData.paymentMethod === 'cash' && (
                 <>
-                  <div className="flex justify-between text-gray-700 uppercase">
+                  <div className="flex justify-between text-gray-700 uppercase text-[9px]">
                     <span>RECEIVED:</span>
                     <span>₱{(receiptData.cashReceived || 0).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-gray-800 uppercase font-bold">
+                  <div className="flex justify-between text-gray-800 uppercase font-bold text-[9px]">
                     <span>CHANGE:</span>
                     <span>₱{(receiptData.changeDue || 0).toFixed(2)}</span>
                   </div>
@@ -1616,16 +1649,16 @@ const handleDeleteProduct = (id: string) => {
               )}
 
               {receiptData.paymentMethod === 'gcash' && receiptData.gcashRefNumber && (
-                <div className="flex justify-between text-gray-700 uppercase">
+                <div className="flex justify-between text-gray-700 uppercase text-[9px]">
                   <span>REF NO:</span>
                   <span>{receiptData.gcashRefNumber}</span>
                 </div>
               )}
             </div>
 
-            {/* Customer Info (Optional) */}
+            {/* Customer Info */}
             {receiptData.customer && (
-              <div className="py-2 border-b border-dashed border-gray-400 text-[10px] space-y-0.5">
+              <div className="py-1.5 border-b border-dashed border-gray-400 text-[9px] space-y-0.5">
                 <p className="font-bold">Customer Info:</p>
                 {receiptData.customer.name && <p>Name: {receiptData.customer.name}</p>}
                 {receiptData.customer.phone && <p>Phone: {receiptData.customer.phone}</p>}
@@ -1634,14 +1667,14 @@ const handleDeleteProduct = (id: string) => {
               </div>
             )}
 
-            {/* Footer Section */}
-            <div className="pt-3 text-center text-[10px] space-y-0.5">
+            {/* Footer */}
+            <div className="pt-2 text-center text-[9px] space-y-0.5">
               <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
               <p className="text-gray-500">Please Come Again</p>
             </div>
 
             {/* Screen Control Buttons */}
-            <div className="mt-4 flex gap-2 print:hidden">
+            <div className="mt-3 flex gap-2 print:hidden">
               <button
                 onClick={() => window.print()}
                 className="flex-1 bg-fuchsia-600 text-white py-2 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs hover:bg-fuchsia-500 transition"
