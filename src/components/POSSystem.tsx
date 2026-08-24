@@ -387,19 +387,19 @@ export default function POSSystem() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans select-none">
       
-      {/* Mobile & Tablet Drawer Backdrop (Only on screens smaller than XL / Android Tablets) */}
+      {/* Mobile & Tablet Drawer Backdrop (Hidden on 2XL wide screens) */}
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 xl:hidden transition-opacity"
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 2xl:hidden transition-opacity"
         />
       )}
 
-      {/* Sidebar Navigation - Hidden by default on mobile & Android Tablets (xl breakpoint), opens via hamburger toggle */}
+      {/* Sidebar Navigation - Hidden by default on portrait/landscape tablets, openable via hamburger */}
       <aside
-        className={`fixed xl:static top-0 bottom-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transition-transform duration-300 ease-in-out ${
+        className={`fixed 2xl:static top-0 bottom-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transition-transform duration-300 ease-in-out ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } xl:translate-x-0`}
+        } 2xl:translate-x-0`}
       >
         <div>
           {/* Logo & Header */}
@@ -417,7 +417,7 @@ export default function POSSystem() {
             </div>
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="xl:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+              className="2xl:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
             >
               <X size={18} />
             </button>
@@ -439,7 +439,7 @@ export default function POSSystem() {
                   key={tab.id}
                   onClick={() => {
                     setActiveTab(tab.id as TabType);
-                    setIsSidebarOpen(false); // Close sidebar on navigation selection
+                    setIsSidebarOpen(false); // Close drawer when selecting navigation link
                   }}
                   className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all ${
                     isActive
@@ -474,12 +474,12 @@ export default function POSSystem() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         
-        {/* Top Header Bar with Hamburger Button for Android Tablets/Mobile */}
+        {/* Top Header Bar with Hamburger Button for Android Tablets and Mobile */}
         <header className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="xl:hidden p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition"
+              className="2xl:hidden p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition"
               aria-label="Open Navigation Menu"
             >
               <Menu size={20} />
@@ -506,7 +506,7 @@ export default function POSSystem() {
           
           {/* 1. POS Terminal Tab */}
           {activeTab === 'pos' && (
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-w-0">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-w-0">
               
               {/* Product Catalog Column */}
               <div className="flex-1 flex flex-col border-r border-slate-800 overflow-hidden min-w-0">
@@ -609,7 +609,7 @@ export default function POSSystem() {
               </div>
 
               {/* Cart Summary Column */}
-              <div className="w-full md:w-96 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col shrink-0">
+              <div className="w-full lg:w-80 xl:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col shrink-0">
                 <div className="p-3 sm:p-4 border-b border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShoppingCart size={18} className="text-fuchsia-400" />
