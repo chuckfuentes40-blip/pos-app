@@ -1278,17 +1278,15 @@ export default function POSSystem() {
                   </button>
                 </div>
 
-                {isInlineScanning && (
-                  <div className="mt-3 bg-black rounded-xl overflow-hidden aspect-video border-2 border-fuchsia-500 flex items-center justify-center relative">
-                    <video
-                      ref={inlineVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
+                {/* Integrated Working Camera Scanner Component */}
+                <CameraScanner
+                  isOpen={isInlineScanning}
+                  onClose={() => setIsInlineScanning(false)}
+                  onScan={(scannedBarcode) => {
+                    setFormBarcode(scannedBarcode);
+                    setIsInlineScanning(false);
+                  }}
+                />
               </div>
 
               <button
