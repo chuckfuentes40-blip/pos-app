@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { Camera, X, AlertCircle } from 'lucide-react';
 
 interface CameraScannerProps {
   isOpen: boolean;
@@ -23,7 +23,6 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
 
     const getDevices = async () => {
       try {
-        // Request temporary access to ensure labels are populated
         const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
         const allDevices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = allDevices.filter((d) => d.kind === 'videoinput');
@@ -33,7 +32,6 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
           setSelectedDeviceId(videoDevices[0].deviceId);
         }
 
-        // Stop temporary stream
         tempStream.getTracks().forEach((t) => t.stop());
       } catch (err) {
         console.warn('Could not enumerate camera devices:', err);
@@ -43,7 +41,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
     getDevices();
   }, [isOpen]);
 
-  // Start stream when device changes
+  // Start video stream
   useEffect(() => {
     if (!isOpen) return;
 
@@ -68,7 +66,6 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
         try {
           stream = await navigator.mediaDevices.getUserMedia(constraints);
         } catch {
-          // Fallback if specific constraint fails
           stream = await navigator.mediaDevices.getUserMedia({ video: true });
         }
 
@@ -105,8 +102,11 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
 
     startCamera();
 
-    // Barcode detection loop
+    // Barcode detection with double-verification anti-ghosting logic
     let animationFrameId: number;
+    let lastCode = '';
+    let consecutiveMatches = 0;
+
     if ('BarcodeDetector' in window) {
       const barcodeDetector = new (window as any).BarcodeDetector({
         formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a'],
@@ -119,13 +119,31 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
         ) {
           try {
             const barcodes = await barcodeDetector.detect(videoRef.current);
-            if (barcodes.length > 0 && onScan) {
-              onScan(barcodes[0].rawValue);
-              onClose();
-              return;
+            if (barcodes.length > 0) {
+              const scannedValue = barcodes[0].rawValue.trim();
+
+              // Require minimum length to ignore noise
+              if (scannedValue.length >= 3) {
+                if (scannedValue === lastCode) {
+                  consecutiveMatches++;
+                } else {
+                  lastCode = scannedValue;
+                  consecutiveMatches = 1;
+                }
+
+                // Verify same barcode across 2 consecutive frames before accepting
+                if (consecutiveMatches >= 2 && onScan) {
+                  onScan(scannedValue);
+                  onClose();
+                  return;
+                }
+              }
+            } else {
+              consecutiveMatches = 0;
+              lastCode = '';
             }
           } catch {
-            // Continuation frame
+            // Frame read continuation
           }
         }
         if (isMounted) {
@@ -196,7 +214,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
           )}
         </div>
 
-        {/* Camera Selector Dropdown */}
+        {/* Camera Selector */}
         {devices.length > 0 && (
           <div className="mt-3">
             <select
@@ -215,7 +233,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
 
         <div className="mt-2 text-center">
           <p className="text-[11px] text-slate-400">
-            Select the active camera from the dropdown above if screen remains black.
+            Hold barcode steady inside the box to register.
           </p>
         </div>
 

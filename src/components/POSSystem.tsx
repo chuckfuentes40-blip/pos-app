@@ -193,6 +193,19 @@ export default function POSSystem() {
   const posVideoRef = useRef<HTMLVideoElement | null>(null);
   const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
 
+// Load persisted products from LocalStorage on mount
+useEffect(() => {
+  const savedProducts = localStorage.getItem('pos_products');
+  if (savedProducts) {
+    try {
+      setProducts(JSON.parse(savedProducts));
+    } catch (err) {
+      console.error('Failed to parse stored products:', err);
+    }
+  }
+}, []);
+
+
   // PWA install prompt handler
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
@@ -340,7 +353,9 @@ export default function POSSystem() {
   };
 
   const handleSaveProduct = (e: React.FormEvent) => {
-    e.preventDefault();
+  e.preventDefault();
+
+  try {
     const newProduct: Product = {
       id: editingProduct ? editingProduct.id : Date.now().toString(),
       name: formName,
@@ -353,21 +368,42 @@ export default function POSSystem() {
       category: 'General'
     };
 
+    let updatedProducts: Product[];
     if (editingProduct) {
-      setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? newProduct : p)));
+      updatedProducts = products.map((p) => (p.id === editingProduct.id ? newProduct : p));
     } else {
-      setProducts((prev) => [newProduct, ...prev]);
+      updatedProducts = [newProduct, ...products];
     }
 
+    // 1. Update State
+    setProducts(updatedProducts);
+
+    // 2. Persist to LocalStorage
+    localStorage.setItem('pos_products', JSON.stringify(updatedProducts));
+
+    // 3. Close Modals
     setIsModalOpen(false);
     setIsInlineScanning(false);
-  };
 
-  const handleDeleteProduct = (id: string) => {
-    if (confirm('Are you sure you want to delete this product?')) {
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-    }
-  };
+    // 4. Success Notification
+    alert(`Success! Product "${formName}" has been ${editingProduct ? 'updated' : 'added'}.`);
+  } catch (err) {
+    console.error('Save product error:', err);
+    alert('Failed to save product. Please try again.');
+  }
+};
+
+const handleDeleteProduct = (id: string) => {
+  if (confirm('Are you sure you want to delete this product?')) {
+    const updatedProducts = products.filter((p) => p.id !== id);
+
+    // Update State and LocalStorage
+    setProducts(updatedProducts);
+    localStorage.setItem('pos_products', JSON.stringify(updatedProducts));
+
+    alert('Product deleted successfully.');
+  }
+};
 
   // Categories list
   const categories = ['All', ...Array.from(new Set(products.map((p) => p.category || 'General')))];
