@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import CameraScanner from './CameraScanner';
 import {
   
   ShoppingCart,
