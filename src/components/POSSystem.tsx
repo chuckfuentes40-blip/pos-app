@@ -194,6 +194,22 @@ export default function POSSystem() {
   // Video scanner refs
   const posVideoRef = useRef<HTMLVideoElement | null>(null);
   const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+// Load saved theme preference on mount
+useEffect(() => {
+  const savedTheme = localStorage.getItem('pos_theme') as 'dark' | 'light';
+  if (savedTheme) {
+    setTheme(savedTheme);
+  }
+}, []);
+
+const handleThemeChange = (newTheme: 'dark' | 'light') => {
+  setTheme(newTheme);
+  localStorage.setItem('pos_theme', newTheme);
+};
+
 useEffect(() => {
   const loadProducts = async () => {
     try {
@@ -475,45 +491,60 @@ const handleDeleteProduct = (id: string) => {
   const totalInventoryCapital = products.reduce((sum, p) => sum + p.cost * p.stock, 0);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans select-none">
-      
-      {/* Mobile & Tablet Drawer Backdrop (Hidden on 2XL wide screens) */}
-      {isSidebarOpen && (
-        <div
-          onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 2xl:hidden transition-opacity"
-        />
-      )}
+  <div
+    className={`flex h-screen w-screen overflow-hidden font-sans select-none transition-colors duration-200 ${
+      theme === 'dark'
+        ? 'bg-slate-950 text-slate-100'
+        : 'bg-slate-100 text-slate-900'
+    }`}
+  >
+    {/* Mobile & Tablet Drawer Backdrop */}
+    {isSidebarOpen && (
+      <div
+        onClick={() => setIsSidebarOpen(false)}
+        className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 2xl:hidden transition-opacity"
+      />
+    )}
 
-      {/* Sidebar Navigation - Hidden by default on portrait/landscape tablets, openable via hamburger */}
-      <aside
-        className={`fixed 2xl:static top-0 bottom-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transition-transform duration-300 ease-in-out ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } 2xl:translate-x-0`}
-      >
-        <div>
-          {/* Logo & Header */}
-          <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img
-                src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/main/Inaki.png"
-                alt="IÑAKI Logo"
-                className="h-9 w-9 rounded-xl object-cover shadow-lg shadow-fuchsia-600/30 border border-slate-700/50"
-              />
-              <div>
-                <h1 className="font-extrabold text-base tracking-wide bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                  IÑAKI
-                </h1>
-                <p className="text-[10px] text-slate-400 font-medium">SARI-SARI Store Terminal</p>
-              </div>
+    {/* Sidebar Navigation */}
+    <aside
+      className={`fixed 2xl:static top-0 bottom-0 left-0 z-50 w-64 ${
+        theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+      } border-r flex flex-col justify-between transition-transform duration-300 ease-in-out ${
+        isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      } 2xl:translate-x-0`}
+    >
+      <div>
+        {/* Logo & Header */}
+        <div className={`p-4 sm:p-5 border-b ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'} flex items-center justify-between`}>
+          <div className="flex items-center gap-3">
+            <img
+              src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/main/Inaki.png"
+              alt="IÑAKI Logo"
+              className="h-9 w-9 rounded-xl object-cover shadow-lg shadow-fuchsia-600/30 border border-slate-700/50"
+            />
+            <div>
+              <h1 className={`font-extrabold text-base tracking-wide ${
+                theme === 'dark'
+                  ? 'bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent'
+                  : 'text-slate-900'
+              }`}>
+                IÑAKI
+              </h1>
+              <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'} font-medium`}>
+                SARI-SARI Store Terminal
+              </p>
             </div>
-            <button
-              onClick={() => setIsSidebarOpen(false)}
-              className="2xl:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
-            >
-              <X size={18} />
-            </button>
           </div>
+          <button
+            onClick={() => setIsSidebarOpen(false)}
+            className={`2xl:hidden p-1.5 rounded-lg ${
+              theme === 'dark' ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <X size={18} />
+          </button>
+        </div>
 
           {/* Navigation Items */}
           <nav className="p-3 space-y-1.5">
@@ -1194,6 +1225,57 @@ const handleDeleteProduct = (id: string) => {
                     </button>
                   </div>
                 )}
+              </div>
+
+                  {/* Display & Appearance Settings */}
+              <div className="mt-6 rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sun size={18} className="text-fuchsia-400" />
+                  <h3 className="text-sm font-bold text-slate-100">Display Theme</h3>
+                </div>
+                <p className="text-xs text-slate-400 mb-4">Choose visual color appearance for the system</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg">
+                  {/* Dark Mode Card */}
+                  <button
+                    type="button"
+                    onClick={() => handleThemeChange('dark')}
+                    className={`p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                      theme === 'dark'
+                        ? 'bg-fuchsia-950/30 border-fuchsia-500 text-white shadow-md shadow-fuchsia-900/20'
+                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Moon size={18} className={theme === 'dark' ? 'text-fuchsia-400' : 'text-slate-500'} />
+                      <div>
+                        <p className="text-xs font-bold text-slate-100">Dark Mode</p>
+                        <p className="text-[11px] text-slate-400">Low-glare dark UI</p>
+                      </div>
+                    </div>
+                    {theme === 'dark' && <Check size={16} className="text-fuchsia-400" />}
+                  </button>
+
+                  {/* Light Mode Card */}
+                  <button
+                    type="button"
+                    onClick={() => handleThemeChange('light')}
+                    className={`p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                      theme === 'light'
+                        ? 'bg-fuchsia-950/30 border-fuchsia-500 text-white shadow-md shadow-fuchsia-900/20'
+                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Sun size={18} className={theme === 'light' ? 'text-fuchsia-400' : 'text-slate-500'} />
+                      <div>
+                        <p className="text-xs font-bold text-slate-100">Light Mode</p>
+                        <p className="text-[11px] text-slate-400">High-contrast bright UI</p>
+                      </div>
+                    </div>
+                    {theme === 'light' && <Check size={16} className="text-fuchsia-400" />}
+                  </button>
+                </div>
               </div>
             </div>
           )}
