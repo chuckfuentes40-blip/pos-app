@@ -1302,32 +1302,14 @@ export default function POSSystem() {
         </div>
       )}
 
-      {/* POS Camera Overlay */}
-      {isPosCameraOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[60] p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl relative">
-            <button
-              onClick={() => setIsPosCameraOpen(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white"
-            >
-              <X size={20} />
-            </button>
-            <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
-              <Camera size={16} className="text-fuchsia-400" /> Camera Scanner
-            </h3>
-            <div className="relative bg-black rounded-xl overflow-hidden aspect-square border border-slate-800">
-              <video
-                ref={posVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-8 border-2 border-emerald-400/80 rounded-lg pointer-events-none animate-pulse" />
-            </div>
-          </div>
-        </div>
-      )}
+          <CameraScanner
+        isOpen={isPosCameraOpen}
+        onClose={() => setIsPosCameraOpen(false)}
+        onScan={(scannedBarcode) => {
+          setSearchQuery(scannedBarcode);
+          setIsPosCameraOpen(false);
+        }}
+      />
 
       {/* Export Report Modal */}
       {isExportModalOpen && (
