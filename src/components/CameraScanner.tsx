@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, X, AlertCircle } from 'lucide-react';
+import { Camera, X, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface CameraScannerProps {
   isOpen: boolean;
@@ -12,9 +12,38 @@ interface CameraScannerProps {
 export default function CameraScanner({ isOpen, onClose, onScan }: CameraScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Enumerate video devices
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const getDevices = async () => {
+      try {
+        // Request temporary access to ensure labels are populated
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = allDevices.filter((d) => d.kind === 'videoinput');
+        
+        setDevices(videoDevices);
+        if (videoDevices.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(videoDevices[0].deviceId);
+        }
+
+        // Stop temporary stream
+        tempStream.getTracks().forEach((t) => t.stop());
+      } catch (err) {
+        console.warn('Could not enumerate camera devices:', err);
+      }
+    };
+
+    getDevices();
+  }, [isOpen]);
+
+  // Start stream when device changes
   useEffect(() => {
     if (!isOpen) return;
 
@@ -22,15 +51,26 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
     setLoading(true);
     setError(null);
 
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
     const startCamera = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        });
+        const constraints: MediaStreamConstraints = {
+          video: selectedDeviceId
+            ? { deviceId: { exact: selectedDeviceId } }
+            : { facingMode: { ideal: 'environment' } },
+        };
+
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch {
+          // Fallback if specific constraint fails
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
 
         if (!isMounted) {
           stream.getTracks().forEach((track) => track.stop());
@@ -41,17 +81,22 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          videoRef.current.onloadedmetadata = async () => {
+            try {
+              await videoRef.current?.play();
+              if (isMounted) setLoading(false);
+            } catch (pErr) {
+              console.error('Play error:', pErr);
+            }
+          };
         }
-
-        setLoading(false);
       } catch (err: any) {
         console.error('Camera access error:', err);
         if (isMounted) {
           setError(
             err.name === 'NotAllowedError'
-              ? 'Camera permission denied. Please allow camera access in browser settings.'
-              : 'Unable to start camera. Ensure no other application is using it.'
+              ? 'Camera access denied in browser settings.'
+              : 'Unable to start video feed. Switch camera or open app in a new tab.'
           );
           setLoading(false);
         }
@@ -60,6 +105,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
 
     startCamera();
 
+    // Barcode detection loop
     let animationFrameId: number;
     if ('BarcodeDetector' in window) {
       const barcodeDetector = new (window as any).BarcodeDetector({
@@ -67,7 +113,10 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
       });
 
       const detectBarcode = async () => {
-        if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+        if (
+          videoRef.current &&
+          videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA
+        ) {
           try {
             const barcodes = await barcodeDetector.detect(videoRef.current);
             if (barcodes.length > 0 && onScan) {
@@ -75,8 +124,8 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
               onClose();
               return;
             }
-          } catch (e) {
-            // Ignore frame detection failures
+          } catch {
+            // Continuation frame
           }
         }
         if (isMounted) {
@@ -95,7 +144,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
         streamRef.current = null;
       }
     };
-  }, [isOpen, onClose, onScan]);
+  }, [isOpen, selectedDeviceId]);
 
   if (!isOpen) return null;
 
@@ -103,6 +152,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
       <div className="relative w-full max-w-sm rounded-2xl bg-slate-900 p-5 border border-slate-800 shadow-2xl text-white">
         
+        {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Camera size={16} className="text-fuchsia-400" />
@@ -116,6 +166,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
           </button>
         </div>
 
+        {/* Video Viewport */}
         <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-black flex items-center justify-center border border-slate-800">
           {error ? (
             <div className="flex flex-col items-center justify-center p-4 text-center text-red-400 gap-2">
@@ -145,9 +196,26 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
           )}
         </div>
 
-        <div className="mt-3 text-center">
+        {/* Camera Selector Dropdown */}
+        {devices.length > 0 && (
+          <div className="mt-3">
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              className="w-full bg-slate-800 text-slate-200 text-xs rounded-lg p-2 border border-slate-700 outline-none"
+            >
+              {devices.map((device, index) => (
+                <option key={device.deviceId || index} value={device.deviceId}>
+                  {device.label || `Camera ${index + 1}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="mt-2 text-center">
           <p className="text-[11px] text-slate-400">
-            Align barcode inside the green frame to scan.
+            Select the active camera from the dropdown above if screen remains black.
           </p>
         </div>
 
