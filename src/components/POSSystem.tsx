@@ -500,9 +500,9 @@ const handleDeleteProduct = (id: string) => {
               </div>
               <div>
                 <h1 className="font-extrabold text-base tracking-wide bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                  PEDDLR POS
+                  IÑAKI
                 </h1>
-                <p className="text-[10px] text-slate-400 font-medium">Smart Retail Terminal</p>
+                <p className="text-[10px] text-slate-400 font-medium">SARI-SARi Store Terminal</p>
               </div>
             </div>
             <button

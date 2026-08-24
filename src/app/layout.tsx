@@ -2,8 +2,8 @@ import './globals.css';
 import SyncManager from '@/components/SyncManager';
 
 export const metadata = {
-  title: 'Peddlr POS',
-  description: 'POS, Inventory, and Load Application',
+  title: 'IÑAKI Sari-SARI STORE',
+  description: 'POS, Inventory',
   manifest: '/manifest.json', // Add this line
 };
 
