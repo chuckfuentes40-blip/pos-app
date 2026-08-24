@@ -1541,39 +1541,49 @@ const handleDeleteProduct = (id: string) => {
 
 {/* Printable Receipt Modal */}
 {receiptData && (
-  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block overflow-y-auto">
-    {/* Corrected Thermal Print Stylesheet */}
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-transparent print:static print:block print:overflow-visible overflow-y-auto">
+    {/* Thermal Print Stylesheet */}
     <style>{`
       @media print {
         @page {
           size: 58mm auto;
           margin: 0mm;
         }
+
+        /* 1. Reset document roots */
         html, body {
           width: 58mm !important;
-          height: auto !important;
           margin: 0 !important;
           padding: 0 !important;
           background: #ffffff !important;
           color: #000000 !important;
           overflow: visible !important;
         }
-        
-        /* 1. Hide everything on screen by default */
-        body * {
-          visibility: hidden;
+
+        /* 2. Kill GPU filters & backdrops that cause blank print canvases */
+        *, *::before, *::after {
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          filter: none !important;
+          box-shadow: none !important;
+          text-shadow: none !important;
         }
 
-        /* 2. Force receipt container AND all nested text/images to be visible */
+        /* 3. Hide all page contents */
+        body * {
+          visibility: hidden !important;
+        }
+
+        /* 4. Force receipt and all internal nodes to render */
         #printable-receipt,
         #printable-receipt * {
           visibility: visible !important;
           color: #000000 !important;
         }
 
-        /* 3. Position the 58mm receipt at top-left */
+        /* 5. Anchor receipt directly to page origin */
         #printable-receipt {
-          position: absolute !important;
+          position: fixed !important;
           left: 0 !important;
           top: 0 !important;
           width: 58mm !important;
@@ -1582,11 +1592,11 @@ const handleDeleteProduct = (id: string) => {
           margin: 0 !important;
           box-sizing: border-box !important;
           background: #ffffff !important;
-          box-shadow: none !important;
-          border: none !important;
+          display: block !important;
+          z-index: 999999 !important;
         }
 
-        /* 4. Completely hide screen-only buttons */
+        /* 6. Hide action buttons completely */
         .print-hide,
         .print-hide * {
           display: none !important;
