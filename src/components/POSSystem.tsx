@@ -1541,14 +1541,22 @@ const handleDeleteProduct = (id: string) => {
 
       {/* Printable Receipt Modal */}
       {receiptData && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static">
-          <div className="bg-white text-black p-5 sm:p-6 rounded-2xl w-full max-w-xs shadow-2xl font-mono text-xs print:shadow-none print:w-full">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block">
+          <div className="bg-white text-black p-4 sm:p-5 rounded-2xl w-full max-w-xs shadow-2xl font-mono text-xs print:shadow-none print:w-full print:max-w-[80mm] print:p-2 print:rounded-none print:m-0 print:text-black">
+            
+            {/* Receipt Top Header with Logo */}
             <div className="text-center pb-3 border-b border-dashed border-gray-400 space-y-1">
-              <h2 className="font-bold text-sm tracking-wider">PEDDLR STORE</h2>
+              <img
+                src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/main/Inaki.png"
+                alt="IÑAKI Logo"
+                className="h-10 w-10 mx-auto rounded-lg object-cover mb-1 border border-gray-200 print:border-none"
+              />
+              <h2 className="font-extrabold text-sm tracking-wider uppercase">IÑAKI SARI-SARI STORE</h2>
               <p className="text-[10px] text-gray-500">{new Date(receiptData.timestamp).toLocaleString('en-PH')}</p>
-              <p className="text-[10px] font-bold text-gray-700">{receiptData.id}</p>
+              <p className="text-[10px] font-bold text-gray-700">Receipt #: {receiptData.id}</p>
             </div>
 
+            {/* Items List */}
             <div className="py-3 border-b border-dashed border-gray-400 space-y-1.5">
               {receiptData.items.map((item) => (
                 <div key={item.id} className="flex justify-between items-start">
@@ -1565,6 +1573,7 @@ const handleDeleteProduct = (id: string) => {
               ))}
             </div>
 
+            {/* Fees & Summary */}
             <div className="py-3 border-b border-dashed border-gray-400 space-y-1">
               {receiptData.discount > 0 && (
                 <div className="flex justify-between text-gray-700">
@@ -1614,6 +1623,7 @@ const handleDeleteProduct = (id: string) => {
               )}
             </div>
 
+            {/* Customer Info (Optional) */}
             {receiptData.customer && (
               <div className="py-2 border-b border-dashed border-gray-400 text-[10px] space-y-0.5">
                 <p className="font-bold">Customer Info:</p>
@@ -1624,16 +1634,23 @@ const handleDeleteProduct = (id: string) => {
               </div>
             )}
 
+            {/* Footer Section */}
+            <div className="pt-3 text-center text-[10px] space-y-0.5">
+              <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
+              <p className="text-gray-500">Please Come Again</p>
+            </div>
+
+            {/* Screen Control Buttons */}
             <div className="mt-4 flex gap-2 print:hidden">
               <button
                 onClick={() => window.print()}
-                className="flex-1 bg-fuchsia-600 text-white py-2 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs"
+                className="flex-1 bg-fuchsia-600 text-white py-2 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs hover:bg-fuchsia-500 transition"
               >
                 <Printer size={14} /> Print
               </button>
               <button
                 onClick={() => setReceiptData(null)}
-                className="bg-gray-200 text-gray-800 px-3 py-2 rounded-xl font-sans font-semibold text-xs"
+                className="bg-gray-200 text-gray-800 px-3 py-2 rounded-xl font-sans font-semibold text-xs hover:bg-gray-300 transition"
               >
                 Close
               </button>
