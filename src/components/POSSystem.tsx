@@ -1,524 +1,239 @@
-'use client';
-
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  PlusCircle,
-  Edit3,
-  Sliders,
   ShoppingCart,
   Package,
-  Check,
-  Receipt,
-  Trash2,
-  Minus,
+  BarChart3,
+  BookOpen,
+  Sliders,
+  Search,
   Plus,
-  X,
+  Trash2,
   Camera,
   Printer,
-  Search,
-  Store,
-  BarChart3,
-  ChevronDown,
-  ChevronUp,
-  Tag,
+  Download,
+  Mail,
+  X,
+  Check,
+  Menu,
   Percent,
   Truck,
-  Mail,
+  User,
+  Phone,
+  MapPin,
+  CreditCard,
+  DollarSign,
   AlertTriangle,
-  Download,
+  TrendingUp,
+  Edit,
+  Minus,
+  FileText,
+  CheckCircle2,
+  Clock,
+  Tag
 } from 'lucide-react';
 
-declare global {
-  interface Window {
-    BarcodeDetector?: any;
-  }
-}
+// --- Types & Interfaces ---
+export type ScanMethod = 'hardware' | 'camera' | 'manual';
+export type TabType = 'pos' | 'inventory' | 'analytics' | 'ledger' | 'settings';
 
 export interface Product {
   id: string;
   name: string;
-  barcode: string;
   price: number;
   cost: number;
   stock: number;
-  lowStockLevel: number;
+  lowStockThreshold: number;
   unit: string;
+  barcode: string;
+  category?: string;
 }
 
 export interface CartItem extends Product {
   quantity: number;
 }
 
-export interface CustomerDetails {
+export interface Customer {
   name: string;
   phone: string;
   address: string;
   notes: string;
 }
 
-export interface SaleRecord {
+export interface Transaction {
   id: string;
   timestamp: string;
   items: CartItem[];
-  grossSales: number;
+  subtotal: number;
   discount: number;
   serviceFee: number;
   deliveryFee: number;
   netSales: number;
-  costOfGoodsSold: number;
-  profit: number;
   paymentMethod: 'cash' | 'gcash';
   cashReceived?: number;
   changeDue?: number;
   gcashRefNumber?: string;
-  customer?: CustomerDetails;
+  customer?: Customer;
 }
 
-export type ScanMethod = 'hardware' | 'camera' | 'manual';
-export type PaymentMethod = 'cash' | 'gcash';
-export type ActiveTab = 'pos' | 'inventory' | 'analytics' | 'settings';
+export interface LedgerEntry {
+  id: string;
+  customerName: string;
+  phone: string;
+  amount: number;
+  dueDate: string;
+  status: 'unpaid' | 'paid';
+  description: string;
+}
 
-const initialProducts: Product[] = [
-  { id: '1', name: 'San Mig Coffee 3-in-1 Original', barcode: '4800016644021', price: 12.00, cost: 9.50, stock: 45, lowStockLevel: 10, unit: 'pcs' },
-  { id: '2', name: 'Lucky Me! Instant Pancit Canton Extra Hot', barcode: '4800016021020', price: 15.50, cost: 12.00, stock: 32, lowStockLevel: 15, unit: 'pcs' },
-  { id: '3', name: '555 Tuna Afritada 155g', barcode: '4800016005551', price: 25.00, cost: 19.50, stock: 8, lowStockLevel: 10, unit: 'pcs' },
-  { id: '4', name: 'Coca-Cola 1.5L PET', barcode: '4800000000012', price: 75.00, cost: 62.00, stock: 18, lowStockLevel: 5, unit: 'pcs' },
-  { id: '5', name: 'Datu Puti Vinegar 200ml', barcode: '4800011000111', price: 18.00, cost: 13.50, stock: 24, lowStockLevel: 8, unit: 'pcs' },
-  { id: '6', name: 'Silver Swan Soy Sauce 200ml', barcode: '4800011000222', price: 19.00, cost: 14.50, stock: 15, lowStockLevel: 5, unit: 'pcs' },
+// --- Initial Sample Data ---
+const INITIAL_PRODUCTS: Product[] = [
+  { id: '1', name: 'Coke Mismo 300ml', price: 20, cost: 15, stock: 45, lowStockThreshold: 10, unit: 'pcs', barcode: '4800016021011', category: 'Beverages' },
+  { id: '2', name: 'San Miguel Light Can', price: 65, cost: 50, stock: 8, lowStockThreshold: 12, unit: 'pcs', barcode: '4800016021028', category: 'Beverages' },
+  { id: '3', name: 'Lucky Me Instant Pancit Canton', price: 15, cost: 11, stock: 120, lowStockThreshold: 20, unit: 'pcs', barcode: '4800016021035', category: 'Groceries' },
+  { id: '4', name: 'Marlboro Red Pack', price: 150, cost: 130, stock: 5, lowStockThreshold: 10, unit: 'pack', barcode: '4800016021042', category: 'Tobacco' },
+  { id: '5', name: 'Gardenia Slice Bread White', price: 85, cost: 70, stock: 15, lowStockThreshold: 5, unit: 'pcs', barcode: '4800016021059', category: 'Bakery' },
 ];
 
-const playScanBeep = () => {
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const audioCtx = new AudioContextClass();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1760, audioCtx.currentTime);
-    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.12);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.12);
-  } catch (err) {
-    console.error('Audio context error:', err);
+const INITIAL_TRANSACTIONS: Transaction[] = [
+  {
+    id: 'TRX-1001',
+    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+    items: [{ ...INITIAL_PRODUCTS[0], quantity: 2 }, { ...INITIAL_PRODUCTS[2], quantity: 4 }],
+    subtotal: 100,
+    discount: 0,
+    serviceFee: 0,
+    deliveryFee: 0,
+    netSales: 100,
+    paymentMethod: 'cash',
+    cashReceived: 100,
+    changeDue: 0
+  },
+  {
+    id: 'TRX-1002',
+    timestamp: new Date(Date.now() - 3600000 * 5).toISOString(),
+    items: [{ ...INITIAL_PRODUCTS[1], quantity: 2 }, { ...INITIAL_PRODUCTS[3], quantity: 1 }],
+    subtotal: 280,
+    discount: 10,
+    serviceFee: 0,
+    deliveryFee: 20,
+    netSales: 290,
+    paymentMethod: 'gcash',
+    gcashRefNumber: '1234567890'
   }
-};
+];
+
+const INITIAL_LEDGER: LedgerEntry[] = [
+  { id: 'LED-1', customerName: 'Aling Nena', phone: '09171234567', amount: 450, dueDate: '2026-09-01', status: 'unpaid', description: 'Groceries & Softdrinks' },
+  { id: 'LED-2', customerName: 'Mang Juan', phone: '09189876543', amount: 1200, dueDate: '2026-08-30', status: 'unpaid', description: 'Sack of Rice partial balance' },
+  { id: 'LED-3', customerName: 'Tito Boy', phone: '09223334444', amount: 300, dueDate: '2026-08-20', status: 'paid', description: 'Cigarettes & Matches' }
+];
 
 export default function POSSystem() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('pos');
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [salesHistory, setSalesHistory] = useState<SaleRecord[]>([]);
+  // Navigation & UI state
+  const [activeTab, setActiveTab] = useState<TabType>('pos');
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+
+  // Hardware / PWA setup
+  const [posScanMethod, setPosScanMethod] = useState<ScanMethod>('hardware');
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  // Data state
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
+  const [ledger, setLedger] = useState<LedgerEntry[]>(INITIAL_LEDGER);
+
+  // POS Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
-  const [posScanMethod, setPosScanMethod] = useState<ScanMethod>('hardware');
-  const [scanStatus, setScanStatus] = useState<'WAITING' | 'SCANNED'>('WAITING');
-
-  const [discount, setDiscount] = useState<number>(0);
+  // Order Modifiers
+  const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [serviceFee, setServiceFee] = useState<number>(0);
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [cashReceived, setCashReceived] = useState<string>('');
-  const [gcashRefNumber, setGcashRefNumber] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-
   const [activeFeeModal, setActiveFeeModal] = useState<'discount' | 'service' | 'delivery' | null>(null);
   const [feeInputValue, setFeeInputValue] = useState<string>('');
 
-  const [showCustomerDetails, setShowCustomerDetails] = useState<boolean>(false);
-  const [customerInfo, setCustomerInfo] = useState<CustomerDetails>({
-    name: '',
-    phone: '',
-    address: '',
-    notes: '',
-  });
+  // Payment State
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash'>('cash');
+  const [cashReceived, setCashReceived] = useState<string>('');
+  const [gcashRefNumber, setGcashRefNumber] = useState<string>('');
 
+  // Customer State
+  const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', address: '', notes: '' });
+  const [showCustomerFields, setShowCustomerFields] = useState<boolean>(false);
+
+  // Modals and Camera
+  const [isPosCameraOpen, setIsPosCameraOpen] = useState(false);
+  const [isInlineScanning, setIsInlineScanning] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Product Form state
   const [formName, setFormName] = useState('');
   const [formPrice, setFormPrice] = useState('');
   const [formCost, setFormCost] = useState('');
   const [formStock, setFormStock] = useState('');
-  const [formLowStock, setFormLowStock] = useState('');
+  const [formLowStock, setFormLowStock] = useState('5');
   const [formUnit, setFormUnit] = useState('pcs');
   const [formBarcode, setFormBarcode] = useState('');
 
-  const [isPosCameraOpen, setIsPosCameraOpen] = useState(false);
-  const posVideoRef = useRef<HTMLVideoElement | null>(null);
-  const [isInlineScanning, setIsInlineScanning] = useState(false);
-  const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  const [receiptData, setReceiptData] = useState<SaleRecord | null>(null);
-
-  const [analyticsRange, setAnalyticsRange] = useState<'today' | 'week' | 'month' | 'all'>('today');
-  const [showNetSalesBreakdown, setShowNetSalesBreakdown] = useState(false);
+  // Export / Analytics / Receipt Modal state
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportTab, setExportTab] = useState<'sales' | 'movement' | 'capital'>('sales');
-  const [exportEmail, setExportEmail] = useState('juan.delacruz@gmail.com');
+  const [exportEmail, setExportEmail] = useState('owner@peddlr.ph');
+  const [receiptData, setReceiptData] = useState<Transaction | null>(null);
+  const [ledgerFilter, setLedgerFilter] = useState<'all' | 'utang' | 'paid'>('all');
 
-  // PWA Install Prompt State
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(false);
+  // Video scanner refs
+  const posVideoRef = useRef<HTMLVideoElement | null>(null);
+  const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  const barcodeBuffer = useRef<string>('');
-  const lastKeyTime = useRef<number>(0);
-
-  // Favicon & PWA Initialization
+  // PWA install prompt handler
   useEffect(() => {
-    // 1. Inject SVG Favicon dynamically
-    const faviconSvg = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23c026d3"><rect width="24" height="24" rx="6" fill="%23020617"/><path d="M4 10h16v10H4zM7 6h10v2H7z" fill="%23c026d3"/><circle cx="12" cy="15" r="2" fill="%2322c55e"/></svg>`;
-    let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'shortcut icon';
-      document.getElementsByTagName('head')[0].appendChild(link);
-    }
-    link.href = faviconSvg;
-
-    // 2. Register Service Worker for PWA
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.warn('Service Worker registration skipped or failed:', err);
-      });
-    }
-
-    // 3. Capture PWA Installation Event
-    const handleBeforeInstallPrompt = (e: Event) => {
+    const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
     };
-
-    const handleAppInstalled = () => {
-      setIsAppInstalled(true);
-      setDeferredPrompt(null);
-    };
-
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
-  const handleInstallApp = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
+  const handleInstallApp = () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === 'accepted') {
+          setDeferredPrompt(null);
+        }
+      });
     }
   };
 
-  const grossSubtotal = useMemo(
-    () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
-    [cart]
-  );
-  const totalCost = useMemo(
-    () => cart.reduce((sum, item) => sum + item.cost * item.quantity, 0),
-    [cart]
-  );
-  const grandTotal = Math.max(0, grossSubtotal - discount + serviceFee + deliveryFee);
-  const cashVal = parseFloat(cashReceived) || 0;
-  const changeDue = cashVal - grandTotal;
+  // Cart Calculations
+  const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const netSales = Math.max(0, subtotal - discountAmount + serviceFee + deliveryFee);
+  const parsedCash = parseFloat(cashReceived) || 0;
+  const changeDue = Math.max(0, parsedCash - netSales);
 
-  const isCheckoutDisabled =
-    cart.length === 0 ||
-    loading ||
-    (paymentMethod === 'cash' && (cashReceived === '' || changeDue < 0)) ||
-    (paymentMethod === 'gcash' && !gcashRefNumber.trim());
-
-  const addToCart = useCallback((product: Product) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id || item.barcode === product.barcode);
+  // Cart Handlers
+  const addToCart = (product: Product) => {
+    setCart((prevCart) => {
+      const existing = prevCart.find((item) => item.id === product.id);
       if (existing) {
-        return prev.map((item) =>
-          item.id === product.id || item.barcode === product.barcode
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
+        return prevCart.map((item) =>
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prevCart, { ...product, quantity: 1 }];
     });
-  }, []);
-
-  const handleBarcodeScanned = useCallback(
-    (code: string) => {
-      const trimmedCode = code.trim();
-      if (!trimmedCode) return;
-
-      playScanBeep();
-      setScanStatus('SCANNED');
-      setTimeout(() => setScanStatus('WAITING'), 1500);
-
-      if (isModalOpen) {
-        setFormBarcode(trimmedCode);
-        setIsInlineScanning(false);
-      } else if (activeTab === 'pos') {
-        const found = products.find((p) => p.barcode === trimmedCode);
-        if (found) {
-          addToCart(found);
-        } else {
-          alert(`Product with barcode "${trimmedCode}" not found.`);
-        }
-      }
-    },
-    [isModalOpen, activeTab, products, addToCart]
-  );
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement;
-      const isInput = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA';
-      if (isInput && !isModalOpen) return;
-
-      const currentTime = Date.now();
-      if (currentTime - lastKeyTime.current > 80) barcodeBuffer.current = '';
-      lastKeyTime.current = currentTime;
-
-      if (e.key === 'Enter') {
-        if (barcodeBuffer.current.length > 2) {
-          e.preventDefault();
-          handleBarcodeScanned(barcodeBuffer.current);
-          barcodeBuffer.current = '';
-        }
-      } else if (e.key.length === 1) {
-        barcodeBuffer.current += e.key;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleBarcodeScanned, isModalOpen]);
-
-  useEffect(() => {
-    let activeStream: MediaStream | null = null;
-
-    if (isPosCameraOpen && posVideoRef.current) {
-      navigator.mediaDevices
-        .getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        })
-        .catch(() => navigator.mediaDevices.getUserMedia({ video: true }))
-        .then((stream) => {
-          if (!stream) return;
-          activeStream = stream;
-          if (posVideoRef.current) {
-            posVideoRef.current.srcObject = stream;
-            posVideoRef.current.play().catch((err) => console.error('Play error:', err));
-          }
-        })
-        .catch((err) => {
-          console.error('Camera access error:', err);
-          alert('Unable to access camera. Please check camera permissions.');
-        });
-    }
-
-    return () => {
-      if (activeStream) {
-        activeStream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [isPosCameraOpen]);
-
-  useEffect(() => {
-    if (!isPosCameraOpen || !posVideoRef.current) return;
-
-    let animationFrameId: number;
-    let detector: any = null;
-
-    if ('BarcodeDetector' in window) {
-      try {
-        detector = new window.BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
-        });
-      } catch (e) {
-        console.error('BarcodeDetector error:', e);
-      }
-    }
-
-    let isProcessing = false;
-
-    const detectFrame = async () => {
-      if (posVideoRef.current && detector && posVideoRef.current.readyState === 4 && !isProcessing) {
-        isProcessing = true;
-        try {
-          const barcodes = await detector.detect(posVideoRef.current);
-          if (barcodes && barcodes.length > 0) {
-            const code = barcodes[0].rawValue;
-            if (code) {
-              handleBarcodeScanned(code);
-              setIsPosCameraOpen(false);
-              return;
-            }
-          }
-        } catch (err) {
-          // Frame analysis catch
-        } fontally {
-          isProcessing = false;
-        }
-      }
-      animationFrameId = requestAnimationFrame(detectFrame);
-    };
-
-    if (detector) {
-      animationFrameId = requestAnimationFrame(detectFrame);
-    }
-
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [isPosCameraOpen, handleBarcodeScanned]);
-
-  useEffect(() => {
-    let activeStream: MediaStream | null = null;
-
-    if (isInlineScanning && inlineVideoRef.current) {
-      navigator.mediaDevices
-        .getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        })
-        .catch(() => navigator.mediaDevices.getUserMedia({ video: true }))
-        .then((stream) => {
-          if (!stream) return;
-          activeStream = stream;
-          if (inlineVideoRef.current) {
-            inlineVideoRef.current.srcObject = stream;
-            inlineVideoRef.current.play().catch((err) => console.error('Play error:', err));
-          }
-        })
-        .catch((err) => {
-          console.error('Inline camera error:', err);
-          alert('Unable to access camera. Please check camera permissions.');
-        });
-    }
-
-    return () => {
-      if (activeStream) {
-        activeStream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [isInlineScanning]);
-
-  useEffect(() => {
-    if (!isInlineScanning || !inlineVideoRef.current) return;
-
-    let animationFrameId: number;
-    let detector: any = null;
-
-    if ('BarcodeDetector' in window) {
-      try {
-        detector = new window.BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
-        });
-      } catch (e) {
-        console.error('BarcodeDetector error:', e);
-      }
-    }
-
-    let isProcessing = false;
-
-    const detectFrame = async () => {
-      if (inlineVideoRef.current && detector && inlineVideoRef.current.readyState === 4 && !isProcessing) {
-        isProcessing = true;
-        try {
-          const barcodes = await detector.detect(inlineVideoRef.current);
-          if (barcodes && barcodes.length > 0) {
-            const code = barcodes[0].rawValue;
-            if (code) {
-              handleBarcodeScanned(code);
-              setIsInlineScanning(false);
-              return;
-            }
-          }
-        } catch (err) {
-          // Frame analysis catch
-        } fontally {
-          isProcessing = false;
-        }
-      }
-      animationFrameId = requestAnimationFrame(detectFrame);
-    };
-
-    if (detector) {
-      animationFrameId = requestAnimationFrame(detectFrame);
-    }
-
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [isInlineScanning, handleBarcodeScanned]);
-
-  const openAddModal = () => {
-    setEditingProduct(null);
-    setFormName('');
-    setFormPrice('');
-    setFormCost('');
-    setFormStock('');
-    setFormLowStock('5');
-    setFormUnit('pcs');
-    setFormBarcode('');
-    setIsInlineScanning(false);
-    setIsModalOpen(true);
   };
 
-  const openEditModal = (product: Product) => {
-    setEditingProduct(product);
-    setFormName(product.name);
-    setFormPrice(product.price.toString());
-    setFormCost(product.cost.toString());
-    setFormStock(product.stock.toString());
-    setFormLowStock(product.lowStockLevel.toString());
-    setFormUnit(product.unit || 'pcs');
-    setFormBarcode(product.barcode || '');
-    setIsInlineScanning(false);
-    setIsModalOpen(true);
-  };
-
-  const handleSaveProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formName || !formPrice) return;
-
-    const newProd: Product = {
-      id: editingProduct ? editingProduct.id : Date.now().toString(),
-      name: formName,
-      price: parseFloat(formPrice) || 0,
-      cost: parseFloat(formCost) || 0,
-      stock: parseInt(formStock, 10) || 0,
-      lowStockLevel: parseInt(formLowStock, 10) || 0,
-      unit: formUnit || 'pcs',
-      barcode: formBarcode,
-    };
-
-    if (editingProduct) {
-      setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? newProd : p)));
-    } else {
-      setProducts((prev) => [...prev, newProd]);
-    }
-
-    setIsInlineScanning(false);
-    setIsModalOpen(false);
-  };
-
-  const updateQuantity = (id: string, barcode: string, delta: number) => {
-    setCart((prev) =>
-      prev
+  const updateQuantity = (id: string, delta: number) => {
+    setCart((prevCart) =>
+      prevCart
         .map((item) => {
-          if (item.id === id || item.barcode === barcode) {
+          if (item.id === id) {
             const newQty = item.quantity + delta;
             return newQty > 0 ? { ...item, quantity: newQty } : null;
           }
@@ -528,416 +243,434 @@ export default function POSSystem() {
     );
   };
 
-  const handleApplyFeeModal = () => {
-    const val = parseFloat(feeInputValue) || 0;
-    if (activeFeeModal === 'discount') setDiscount(val);
-    if (activeFeeModal === 'service') setServiceFee(val);
-    if (activeFeeModal === 'delivery') setDeliveryFee(val);
-    setActiveFeeModal(null);
-    setFeeInputValue('');
+  const removeFromCart = (id: string) => {
+    setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
-    setLoading(true);
+    if (paymentMethod === 'cash' && parsedCash < netSales) {
+      alert('Cash received is insufficient!');
+      return;
+    }
 
-    setTimeout(() => {
-      setProducts((prev) =>
-        prev.map((p) => {
-          const itemInCart = cart.find((c) => c.id === p.id || c.barcode === p.barcode);
-          return itemInCart ? { ...p, stock: Math.max(0, p.stock - itemInCart.quantity) } : p;
-        })
-      );
+    const newTransaction: Transaction = {
+      id: `TRX-${Date.now().toString().slice(-5)}`,
+      timestamp: new Date().toISOString(),
+      items: [...cart],
+      subtotal,
+      discount: discountAmount,
+      serviceFee,
+      deliveryFee,
+      netSales,
+      paymentMethod,
+      cashReceived: paymentMethod === 'cash' ? parsedCash : undefined,
+      changeDue: paymentMethod === 'cash' ? changeDue : undefined,
+      gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : undefined,
+      customer: customer.name ? { ...customer } : undefined
+    };
 
-      const netSales = grandTotal;
-      const profit = netSales - totalCost;
+    // Deduct stock
+    setProducts((prev) =>
+      prev.map((prod) => {
+        const cartItem = cart.find((c) => c.id === prod.id);
+        if (cartItem) {
+          return { ...prod, stock: Math.max(0, prod.stock - cartItem.quantity) };
+        }
+        return prod;
+      })
+    );
 
-      const record: SaleRecord = {
-        id: `INV-${Date.now().toString().slice(-6)}`,
-        timestamp: new Date().toISOString(),
-        items: [...cart],
-        grossSales: grossSubtotal,
-        discount,
-        serviceFee,
-        deliveryFee,
-        netSales,
-        costOfGoodsSold: totalCost,
-        profit,
-        paymentMethod,
-        cashReceived: paymentMethod === 'cash' ? cashVal : undefined,
-        changeDue: paymentMethod === 'cash' ? changeDue : undefined,
-        gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : undefined,
-        customer: customerInfo.name ? { ...customerInfo } : undefined,
-      };
+    setTransactions((prev) => [newTransaction, ...prev]);
+    setReceiptData(newTransaction);
 
-      setSalesHistory((prev) => [record, ...prev]);
-      setReceiptData(record);
-
-      setCart([]);
-      setDiscount(0);
-      setServiceFee(0);
-      setDeliveryFee(0);
-      setCashReceived('');
-      setGcashRefNumber('');
-      setCustomerInfo({ name: '', phone: '', address: '', notes: '' });
-      setShowCustomerDetails(false);
-      setLoading(false);
-    }, 500);
+    // Reset Cart and Order State
+    setCart([]);
+    setDiscountAmount(0);
+    setServiceFee(0);
+    setDeliveryFee(0);
+    setCashReceived('');
+    setGcashRefNumber('');
+    setCustomer({ name: '', phone: '', address: '', notes: '' });
+    setShowCustomerFields(false);
   };
 
-  const filteredSales = useMemo(() => {
-    const now = new Date();
-    return salesHistory.filter((sale) => {
-      const saleDate = new Date(sale.timestamp);
-      if (analyticsRange === 'today') {
-        return saleDate.toDateString() === now.toDateString();
-      }
-      if (analyticsRange === 'week') {
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        return saleDate >= oneWeekAgo;
-      }
-      if (analyticsRange === 'month') {
-        return saleDate.getMonth() === now.getMonth() && saleDate.getFullYear() === now.getFullYear();
-      }
-      return true;
-    });
-  }, [salesHistory, analyticsRange]);
+  // Fee / Discount Modal
+  const handleOpenFeeModal = (type: 'discount' | 'service' | 'delivery') => {
+    setActiveFeeModal(type);
+    if (type === 'discount') setFeeInputValue(discountAmount.toString());
+    if (type === 'service') setFeeInputValue(serviceFee.toString());
+    if (type === 'delivery') setFeeInputValue(deliveryFee.toString());
+  };
 
-  const analyticsMetrics = useMemo(() => {
-    const transactionCount = filteredSales.length;
-    const grossSalesSum = filteredSales.reduce((sum, s) => sum + s.grossSales, 0);
-    const discountSum = filteredSales.reduce((sum, s) => sum + s.discount, 0);
-    const serviceFeeSum = filteredSales.reduce((sum, s) => sum + s.serviceFee, 0);
-    const deliveryFeeSum = filteredSales.reduce((sum, s) => sum + s.deliveryFee, 0);
-    const netSalesSum = filteredSales.reduce((sum, s) => sum + s.netSales, 0);
-    const copsSum = filteredSales.reduce((sum, s) => sum + s.costOfGoodsSold, 0);
-    const profitSum = filteredSales.reduce((sum, s) => sum + s.profit, 0);
-    const avgBasketSize = transactionCount > 0 ? netSalesSum / transactionCount : 0;
-    const margin = netSalesSum > 0 ? (profitSum / netSalesSum) * 100 : 0;
+  const handleApplyFeeModal = () => {
+    const val = parseFloat(feeInputValue) || 0;
+    if (activeFeeModal === 'discount') setDiscountAmount(val);
+    if (activeFeeModal === 'service') setServiceFee(val);
+    if (activeFeeModal === 'delivery') setDeliveryFee(val);
+    setActiveFeeModal(null);
+  };
 
-    return {
-      transactionCount,
-      grossSalesSum,
-      discountSum,
-      serviceFeeSum,
-      deliveryFeeSum,
-      netSalesSum,
-      copsSum,
-      profitSum,
-      avgBasketSize,
-      margin,
+  // Product Add / Edit Modal
+  const handleOpenProductModal = (product?: Product) => {
+    if (product) {
+      setEditingProduct(product);
+      setFormName(product.name);
+      setFormPrice(product.price.toString());
+      setFormCost(product.cost.toString());
+      setFormStock(product.stock.toString());
+      setFormLowStock(product.lowStockThreshold.toString());
+      setFormUnit(product.unit);
+      setFormBarcode(product.barcode);
+    } else {
+      setEditingProduct(null);
+      setFormName('');
+      setFormPrice('');
+      setFormCost('');
+      setFormStock('');
+      setFormLowStock('5');
+      setFormUnit('pcs');
+      setFormBarcode('');
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleSaveProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newProduct: Product = {
+      id: editingProduct ? editingProduct.id : Date.now().toString(),
+      name: formName,
+      price: parseFloat(formPrice) || 0,
+      cost: parseFloat(formCost) || 0,
+      stock: parseInt(formStock) || 0,
+      lowStockThreshold: parseInt(formLowStock) || 5,
+      unit: formUnit,
+      barcode: formBarcode || Date.now().toString(),
+      category: 'General'
     };
-  }, [filteredSales]);
 
-  const inventoryCapital = useMemo(() => {
-    return products.reduce(
-      (acc, p) => {
-        acc.totalCost += p.cost * p.stock;
-        acc.totalSRP += p.price * p.stock;
-        acc.totalItems += p.stock;
-        return acc;
-      },
-      { totalCost: 0, totalSRP: 0, totalItems: 0 }
-    );
-  }, [products]);
+    if (editingProduct) {
+      setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? newProduct : p)));
+    } else {
+      setProducts((prev) => [newProduct, ...prev]);
+    }
 
-  const filteredProductsList = products.filter(
-    (p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.barcode.includes(searchQuery)
-  );
+    setIsModalOpen(false);
+    setIsInlineScanning(false);
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    if (confirm('Are you sure you want to delete this product?')) {
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+    }
+  };
+
+  // Categories list
+  const categories = ['All', ...Array.from(new Set(products.map((p) => p.category || 'General')))];
+
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.barcode.includes(searchQuery);
+    const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
+    return matchesSearch && matchesCat;
+  });
+
+  // Analytics Metrics
+  const totalSalesVal = transactions.reduce((sum, t) => sum + t.netSales, 0);
+  const totalCostVal = transactions.reduce((sum, t) => {
+    const costOfItems = t.items.reduce((c, i) => c + i.cost * i.quantity, 0);
+    return sum + costOfItems;
+  }, 0);
+  const grossProfit = totalSalesVal - totalCostVal;
+  const totalInventoryCapital = products.reduce((sum, p) => sum + p.cost * p.stock, 0);
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen w-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
-      {/* Mobile / Small Screen Header */}
-      <header className="lg:hidden flex items-center justify-between bg-slate-900 border-b border-slate-800 p-3 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-fuchsia-600 text-white rounded-lg shadow-md shadow-fuchsia-600/30">
-            <Store size={18} />
-          </div>
-          <span className="font-bold text-sm tracking-tight">PEDDLR POS</span>
-        </div>
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans select-none">
+      
+      {/* Mobile & Tablet Drawer Backdrop (Only on screens smaller than XL / Android Tablets) */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 xl:hidden transition-opacity"
+        />
+      )}
 
-        <div className="flex items-center gap-1.5">
-          {deferredPrompt && (
-            <button
-              onClick={handleInstallApp}
-              className="px-2.5 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-md"
-            >
-              <Download size={14} /> Install
-            </button>
-          )}
-
-          <nav className="flex items-center gap-1">
-            <button
-              onClick={() => setActiveTab('pos')}
-              className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
-                activeTab === 'pos' ? 'bg-fuchsia-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <ShoppingCart size={16} /> <span className="hidden sm:inline">POS</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('inventory')}
-              className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
-                activeTab === 'inventory' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Package size={16} /> <span className="hidden sm:inline">Stock</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
-                activeTab === 'analytics' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <BarChart3 size={16} /> <span className="hidden sm:inline">Reports</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
-                activeTab === 'settings' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Sliders size={16} />
-            </button>
-          </nav>
-        </div>
-      </header>
-
-      {/* Desktop Navigation Sidebar */}
-      <aside className="hidden lg:flex w-60 xl:w-64 bg-slate-900 border-r border-slate-800 flex-col justify-between p-4 flex-shrink-0 print:hidden">
+      {/* Sidebar Navigation - Hidden by default on mobile & Android Tablets (xl breakpoint), opens via hamburger toggle */}
+      <aside
+        className={`fixed xl:static top-0 bottom-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transition-transform duration-300 ease-in-out ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } xl:translate-x-0`}
+      >
         <div>
-          <div className="flex items-center gap-3 px-2 py-4 border-b border-slate-800 mb-6">
-            <div className="p-2.5 bg-fuchsia-600 text-white rounded-xl shadow-lg shadow-fuchsia-600/30">
-              <Store size={22} />
+          {/* Logo & Header */}
+          <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-pink-500 flex items-center justify-center font-black text-white text-lg shadow-lg shadow-fuchsia-600/30">
+                P
+              </div>
+              <div>
+                <h1 className="font-extrabold text-base tracking-wide bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+                  PEDDLR POS
+                </h1>
+                <p className="text-[10px] text-slate-400 font-medium">Smart Retail Terminal</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-bold text-base leading-tight">PEDDLR POS</h1>
-              <p className="text-[11px] text-slate-400">Retail & Analytics</p>
-            </div>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="xl:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+            >
+              <X size={18} />
+            </button>
           </div>
 
-          <nav className="space-y-1.5">
-            <button
-              onClick={() => setActiveTab('pos')}
-              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition ${
-                activeTab === 'pos'
-                  ? 'bg-fuchsia-600 text-white shadow-md shadow-fuchsia-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-              }`}
-            >
-              <ShoppingCart size={18} /> POS Terminal
-            </button>
-            <button
-              onClick={() => setActiveTab('inventory')}
-              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition ${
-                activeTab === 'inventory'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-              }`}
-            >
-              <Package size={18} /> Stock Ledger
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition ${
-                activeTab === 'analytics'
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-              }`}
-            >
-              <BarChart3 size={18} /> Analytics & Reports
-            </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition ${
-                activeTab === 'settings'
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-              }`}
-            >
-              <Sliders size={18} /> Hardware Settings
-            </button>
+          {/* Navigation Items */}
+          <nav className="p-3 space-y-1.5">
+            {[
+              { id: 'pos', label: 'POS Terminal', icon: ShoppingCart },
+              { id: 'inventory', label: 'Inventory', icon: Package },
+              { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+              { id: 'ledger', label: 'Utang Ledger', icon: BookOpen },
+              { id: 'settings', label: 'Hardware Settings', icon: Sliders },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id as TabType);
+                    setIsSidebarOpen(false); // Close sidebar on navigation selection
+                  }}
+                  className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all ${
+                    isActive
+                      ? 'bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-600/30'
+                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </nav>
         </div>
 
-        <div className="space-y-3">
-          {deferredPrompt && (
-            <button
-              onClick={handleInstallApp}
-              className="w-full bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white p-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-fuchsia-600/25 transition animate-pulse"
-            >
-              <Download size={16} /> Install App Version
-            </button>
-          )}
-
-          <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400 space-y-1">
-            <p className="font-semibold text-slate-300">Scanner Status:</p>
-            <p className="flex items-center gap-1.5 font-bold">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  scanStatus === 'SCANNED' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
-                }`}
-              />
-              {scanStatus}
-            </p>
+        {/* Store Profile Footer */}
+        <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-fuchsia-400">
+              S
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-200 truncate">Sari-Sari Store Main</p>
+              <p className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Online Sync
+              </p>
+            </div>
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-hidden">
-        {/* POS Tab */}
-        {activeTab === 'pos' && (
-          <div className="flex-1 flex flex-col lg:flex-row min-w-0 overflow-hidden">
-            <div className="flex-1 flex flex-col p-3 sm:p-4 md:p-6 min-w-0 overflow-y-auto">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
-                <div className="relative flex-1 min-w-0">
-                  <Search className="absolute left-3.5 top-3 text-slate-500" size={16} />
-                  <input
-                    type="text"
-                    placeholder="Search item name or barcode..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                  />
-                </div>
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        
+        {/* Top Header Bar with Hamburger Button for Android Tablets/Mobile */}
+        <header className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="xl:hidden p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition"
+              aria-label="Open Navigation Menu"
+            >
+              <Menu size={20} />
+            </button>
+            <h2 className="text-sm sm:text-base font-bold tracking-wide capitalize text-slate-100 flex items-center gap-2">
+              {activeTab === 'pos' && <ShoppingCart size={18} className="text-fuchsia-400" />}
+              {activeTab === 'inventory' && <Package size={18} className="text-fuchsia-400" />}
+              {activeTab === 'analytics' && <BarChart3 size={18} className="text-fuchsia-400" />}
+              {activeTab === 'ledger' && <BookOpen size={18} className="text-fuchsia-400" />}
+              {activeTab === 'settings' && <Sliders size={18} className="text-fuchsia-400" />}
+              {activeTab === 'pos' ? 'POS Checkout Terminal' : activeTab}
+            </h2>
+          </div>
 
-                {posScanMethod === 'camera' && (
-                  <button
-                    onClick={() => setIsPosCameraOpen(true)}
-                    className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-fuchsia-600/20 whitespace-nowrap"
-                  >
-                    <Camera size={16} /> Camera Scanner
-                  </button>
-                )}
-              </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 hidden sm:inline-block">
+              {new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
+        </header>
 
-             {/* Middle Container: Product Catalog */}
-              <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-slate-950 p-3 sm:p-4">
+        {/* Tab Body Contents */}
+        <main className="flex-1 overflow-hidden flex min-w-0">
+          
+          {/* 1. POS Terminal Tab */}
+          {activeTab === 'pos' && (
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-w-0">
+              
+              {/* Product Catalog Column */}
+              <div className="flex-1 flex flex-col border-r border-slate-800 overflow-hidden min-w-0">
                 
-                {/* Search Bar Container */}
-                <div className="mb-3 shrink-0">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Search item name or barcode..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                    />
+                {/* Search & Scan Controls */}
+                <div className="p-3 sm:p-4 bg-slate-900/60 border-b border-slate-800 space-y-3">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
+                      <input
+                        type="text"
+                        placeholder="Search product name or barcode..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
+                      />
+                      {searchQuery && (
+                        <button
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => setIsPosCameraOpen(true)}
+                      className="px-3.5 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0"
+                    >
+                      <Camera size={16} />
+                      <span className="hidden sm:inline">Camera Scan</span>
+                    </button>
                   </div>
-                </div>
 
-                {/* Product Grid Area (Vertical Scroll Only) */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
-                    {filteredProducts.map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => addToCart(item)}
-                        className="bg-slate-900/90 border border-slate-800 hover:border-purple-500/60 rounded-xl p-3 flex flex-col justify-between cursor-pointer transition-all hover:bg-slate-800/80 min-h-[140px]"
+                  {/* Category Pills */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {categories.map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setSelectedCategory(cat)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                          selectedCategory === cat
+                            ? 'bg-fuchsia-600 text-white'
+                            : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        }`}
                       >
-                        {/* Top Row: Clean In-Flow Barcode & Stock */}
-                        <div className="flex items-center justify-between gap-1.5 mb-2 w-full">
-                          <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/50 truncate max-w-[65%]">
-                            {item.barcode || 'NO-BARCODE'}
-                          </span>
-                          
-                          {item.stock !== undefined && (
-                            <span className="text-[10px] font-medium text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/50 shrink-0">
-                              {item.stock} left
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Product Title */}
-                        <div className="mb-2">
-                          <h3 className="font-medium text-slate-200 text-xs sm:text-sm leading-tight line-clamp-2">
-                            {item.name}
-                          </h3>
-                        </div>
-
-                        {/* Price & Add Button */}
-                        <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-800/80">
-                          <div>
-                            <div className="text-emerald-400 font-bold text-xs sm:text-sm">
-                              ₱{item.price.toFixed(2)}
-                            </div>
-                            <div className="text-[10px] text-slate-500 font-mono">
-                              Cost: ₱{item.costPrice ? item.costPrice.toFixed(2) : '0.00'}
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addToCart(item);
-                            }}
-                            className="p-1.5 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white rounded-lg transition-colors shrink-0 ml-1"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
+                        {cat}
+                      </button>
                     ))}
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Cart Sidebar */}
-            <aside className="w-full lg:w-80 xl:w-96 bg-slate-950 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col justify-between p-4 flex-shrink-0 overflow-y-auto max-h-[45vh] lg:max-h-full print:hidden">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                {/* Product Grid */}
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {filteredProducts.map((product) => {
+                    const isLowStock = product.stock <= product.lowStockThreshold;
+                    const isOutOfStock = product.stock <= 0;
+
+                    return (
+                      <button
+                        key={product.id}
+                        onClick={() => addToCart(product)}
+                        disabled={isOutOfStock}
+                        className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between relative group ${
+                          isOutOfStock
+                            ? 'bg-slate-900/40 border-slate-800/60 opacity-50 cursor-not-allowed'
+                            : 'bg-slate-900 border-slate-800/80 hover:border-fuchsia-500/50 hover:bg-slate-850'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-1 mb-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-400 bg-fuchsia-600/10 px-2 py-0.5 rounded-md">
+                              {product.category || 'Item'}
+                            </span>
+                            {isLowStock && !isOutOfStock && (
+                              <span className="text-[9px] bg-amber-500/20 text-amber-400 font-bold px-1.5 py-0.5 rounded">
+                                Low
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="font-bold text-xs sm:text-sm text-slate-100 line-clamp-2 leading-snug">
+                            {product.name}
+                          </h3>
+                        </div>
+
+                        <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between">
+                          <span className="font-mono font-bold text-sm text-white">
+                            ₱{product.price.toFixed(2)}
+                          </span>
+                          <span className={`text-[10px] font-mono ${isOutOfStock ? 'text-rose-400 font-bold' : 'text-slate-400'}`}>
+                            {isOutOfStock ? 'OUT OF STOCK' : `${product.stock} ${product.unit}`}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Cart Summary Column */}
+              <div className="w-full md:w-96 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col shrink-0">
+                <div className="p-3 sm:p-4 border-b border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Receipt className="text-fuchsia-400" size={18} />
-                    <h2 className="font-bold text-slate-100 text-xs sm:text-sm">Cart Items</h2>
+                    <ShoppingCart size={18} className="text-fuchsia-400" />
+                    <h3 className="font-bold text-sm text-slate-100">Current Order</h3>
                   </div>
                   {cart.length > 0 && (
                     <button
                       onClick={() => setCart([])}
-                      className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1"
+                      className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1"
                     >
                       <Trash2 size={12} /> Clear
                     </button>
                   )}
                 </div>
 
-                <div className="space-y-2 max-h-36 sm:max-h-48 lg:max-h-56 overflow-y-auto pr-1">
+                {/* Cart Items List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {cart.length === 0 ? (
-                    <div className="text-center py-6 text-slate-600">
-                      <ShoppingCart size={28} className="mx-auto mb-1.5 opacity-40" />
-                      <p className="text-xs font-medium">No items in cart</p>
+                    <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
+                      <ShoppingCart size={36} className="text-slate-700 stroke-1" />
+                      <p className="text-xs font-semibold">Cart is empty</p>
+                      <p className="text-[11px] text-slate-600">Select items from catalog to build order</p>
                     </div>
                   ) : (
                     cart.map((item) => (
                       <div
                         key={item.id}
-                        className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between text-xs"
+                        className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2"
                       >
-                        <div className="min-w-0 flex-1 pr-2">
-                          <p className="font-medium text-slate-200 truncate">{item.name}</p>
-                          <p className="text-[11px] text-slate-400">
-                            ₱{item.price.toFixed(2)} × {item.quantity} ={' '}
-                            <span className="font-bold text-emerald-400">
-                              ₱{(item.price * item.quantity).toFixed(2)}
-                            </span>
-                          </p>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-bold text-xs text-slate-200 truncate">{item.name}</h4>
+                          <p className="text-[10px] font-mono text-slate-400">₱{item.price.toFixed(2)} / {item.unit}</p>
                         </div>
-                        <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1 flex-shrink-0">
+
+                        <div className="flex items-center gap-1.5">
                           <button
-                            onClick={() => updateQuantity(item.id, item.barcode, -1)}
-                            className="p-1 text-slate-400 hover:text-white"
+                            onClick={() => updateQuantity(item.id, -1)}
+                            className="h-6 w-6 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs"
                           >
                             <Minus size={12} />
                           </button>
-                          <span className="font-bold px-1 text-xs">{item.quantity}</span>
+                          <span className="font-mono text-xs font-bold px-1.5 min-w-[20px] text-center text-white">
+                            {item.quantity}
+                          </span>
                           <button
-                            onClick={() => updateQuantity(item.id, item.barcode, 1)}
-                            className="p-1 text-slate-400 hover:text-white"
+                            onClick={() => updateQuantity(item.id, 1)}
+                            className="h-6 w-6 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs"
                           >
                             <Plus size={12} />
+                          </button>
+                        </div>
+
+                        <div className="text-right min-w-[60px]">
+                          <p className="font-mono font-bold text-xs text-white">
+                            ₱{(item.price * item.quantity).toFixed(2)}
+                          </p>
+                          <button
+                            onClick={() => removeFromCart(item.id)}
+                            className="text-[10px] text-slate-500 hover:text-rose-400"
+                          >
+                            Remove
                           </button>
                         </div>
                       </div>
@@ -945,413 +678,454 @@ export default function POSSystem() {
                   )}
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 p-2.5 sm:p-3 rounded-xl flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-400 uppercase">GRAND TOTAL:</span>
-                  <span className="text-xl sm:text-2xl font-black text-emerald-400">
-                    ₱{grandTotal.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-                  <button
-                    onClick={() => {
-                      setFeeInputValue(discount ? discount.toString() : '');
-                      setActiveFeeModal('discount');
-                    }}
-                    className={`p-2 rounded-xl border font-semibold flex flex-col items-center justify-center gap-1 transition ${
-                      discount > 0
-                        ? 'bg-purple-600/20 text-purple-300 border-purple-500/40'
-                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    <Tag size={14} /> Discount {discount > 0 && `(₱${discount})`}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setFeeInputValue(serviceFee ? serviceFee.toString() : '');
-                      setActiveFeeModal('service');
-                    }}
-                    className={`p-2 rounded-xl border font-semibold flex flex-col items-center justify-center gap-1 transition ${
-                      serviceFee > 0
-                        ? 'bg-purple-600/20 text-purple-300 border-purple-500/40'
-                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    <Percent size={14} /> Service {serviceFee > 0 && `(₱${serviceFee})`}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setFeeInputValue(deliveryFee ? deliveryFee.toString() : '');
-                      setActiveFeeModal('delivery');
-                    }}
-                    className={`p-2 rounded-xl border font-semibold flex flex-col items-center justify-center gap-1 transition ${
-                      deliveryFee > 0
-                        ? 'bg-purple-600/20 text-purple-300 border-purple-500/40'
-                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    <Truck size={14} /> Delivery {deliveryFee > 0 && `(₱${deliveryFee})`}
-                  </button>
-                </div>
-
-                <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
-                  <button
-                    onClick={() => setShowCustomerDetails((prev) => !prev)}
-                    className="w-full bg-purple-900/40 p-2.5 text-left font-bold text-xs text-purple-200 flex items-center justify-between"
-                  >
-                    <span>Customer Details</span>
-                    {showCustomerDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-
-                  {showCustomerDetails && (
-                    <div className="p-2.5 space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Customer name"
-                        value={customerInfo.name}
-                        onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Phone number"
-                        value={customerInfo.phone}
-                        onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Address"
-                        value={customerInfo.address}
-                        onChange={(e) => setCustomerInfo({ ...customerInfo, address: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      />
-                      <textarea
-                        placeholder="Notes"
-                        rows={2}
-                        value={customerInfo.notes}
-                        onChange={(e) => setCustomerInfo({ ...customerInfo, notes: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 space-y-2 mt-3">
-                <div className="grid grid-cols-2 gap-2">
-                  {(['cash', 'gcash'] as const).map((method) => (
+                {/* Checkout Section */}
+                <div className="p-3 sm:p-4 border-t border-slate-800 bg-slate-950 space-y-3">
+                  
+                  {/* Fee & Discount Quick Buttons */}
+                  <div className="grid grid-cols-3 gap-1.5">
                     <button
-                      key={method}
-                      onClick={() => setPaymentMethod(method)}
-                      className={`py-2 text-xs font-semibold rounded-xl border uppercase transition ${
-                        paymentMethod === method
-                          ? 'bg-fuchsia-600 text-white border-fuchsia-500 shadow-md shadow-fuchsia-600/30'
-                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'
+                      onClick={() => handleOpenFeeModal('discount')}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition flex items-center justify-center gap-1 ${
+                        discountAmount > 0
+                          ? 'bg-fuchsia-600/20 border-fuchsia-500/50 text-fuchsia-300'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
                       }`}
                     >
-                      {method === 'gcash' ? 'GCash' : 'Cash'}
+                      <Percent size={12} /> Disc: ₱{discountAmount}
                     </button>
-                  ))}
-                </div>
 
-                {paymentMethod === 'cash' && (
-                  <div className="space-y-1">
-                    <input
-                      type="number"
-                      placeholder="Cash Received (₱)"
-                      value={cashReceived}
-                      onChange={(e) => setCashReceived(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-500 font-mono"
-                    />
-                    {cashReceived !== '' && (
-                      <div className="flex justify-between items-center text-xs px-1 font-semibold">
-                        <span className="text-slate-400">Change:</span>
-                        <span className={`font-mono ${changeDue >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {changeDue >= 0 ? `₱${changeDue.toFixed(2)}` : 'Insufficient'}
-                        </span>
+                    <button
+                      onClick={() => handleOpenFeeModal('service')}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition flex items-center justify-center gap-1 ${
+                        serviceFee > 0
+                          ? 'bg-fuchsia-600/20 border-fuchsia-500/50 text-fuchsia-300'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Tag size={12} /> Fee: ₱{serviceFee}
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenFeeModal('delivery')}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition flex items-center justify-center gap-1 ${
+                        deliveryFee > 0
+                          ? 'bg-fuchsia-600/20 border-fuchsia-500/50 text-fuchsia-300'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Truck size={12} /> Del: ₱{deliveryFee}
+                    </button>
+                  </div>
+
+                  {/* Customer Information Drawer */}
+                  <div>
+                    <button
+                      onClick={() => setShowCustomerFields(!showCustomerFields)}
+                      className="text-[11px] font-bold text-fuchsia-400 hover:underline flex items-center gap-1"
+                    >
+                      <User size={12} /> {customer.name ? `Customer: ${customer.name}` : '+ Attach Customer Info'}
+                    </button>
+
+                    {showCustomerFields && (
+                      <div className="mt-2 space-y-2 p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs">
+                        <input
+                          type="text"
+                          placeholder="Customer Name"
+                          value={customer.name}
+                          onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Phone Number"
+                          value={customer.phone}
+                          onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100"
+                        />
                       </div>
                     )}
                   </div>
-                )}
 
-                {paymentMethod === 'gcash' && (
-                  <input
-                    type="text"
-                    placeholder="GCash Ref Number"
-                    value={gcashRefNumber}
-                    onChange={(e) => setGcashRefNumber(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-500 font-mono"
-                  />
-                )}
-
-                <button
-                  onClick={handleCheckout}
-                  disabled={isCheckoutDisabled}
-                  className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition shadow-lg shadow-fuchsia-600/25 disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none"
-                >
-                  <Check size={16} /> {loading ? 'Processing...' : 'CONFIRM SALE'}
-                </button>
-              </div>
-            </aside>
-          </div>
-        )}
-
-        {/* Inventory Tab */}
-        {activeTab === 'inventory' && (
-          <div className="flex-1 p-4 sm:p-6 overflow-y-auto min-w-0">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold">Stock Ledger & Inventory</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Capital Value: <span className="text-emerald-400 font-bold">₱{inventoryCapital.totalCost.toFixed(2)}</span> |
-                  SRP Value: <span className="text-fuchsia-400 font-bold">₱{inventoryCapital.totalSRP.toFixed(2)}</span>
-                </p>
-              </div>
-              <button
-                onClick={openAddModal}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20"
-              >
-                <PlusCircle size={16} /> Add Product
-              </button>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-x-auto">
-              <table className="w-full text-left text-xs sm:text-sm text-slate-300 min-w-[600px]">
-                <thead className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800">
-                  <tr>
-                    <th className="p-3 sm:p-4">Item Description</th>
-                    <th className="p-3 sm:p-4">Barcode</th>
-                    <th className="p-3 sm:p-4">Price (SRP)</th>
-                    <th className="p-3 sm:p-4">Cost (Puhunan)</th>
-                    <th className="p-3 sm:p-4">Stock</th>
-                    <th className="p-3 sm:p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {products.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-800/30">
-                      <td className="p-3 sm:p-4 font-medium text-slate-100">
-                        {p.name}
-                        {p.stock <= p.lowStockLevel && (
-                          <span className="ml-2 inline-flex items-center gap-1 text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">
-                            <AlertTriangle size={10} /> Low Stock
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3 sm:p-4 font-mono text-xs text-slate-400">{p.barcode || '—'}</td>
-                      <td className="p-3 sm:p-4 font-bold text-emerald-400">₱{p.price.toFixed(2)}</td>
-                      <td className="p-3 sm:p-4 font-mono text-slate-400">₱{p.cost.toFixed(2)}</td>
-                      <td className="p-3 sm:p-4">
-                        <span className="px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-full text-xs font-semibold whitespace-nowrap">
-                          {p.stock} {p.unit}
-                        </span>
-                      </td>
-                      <td className="p-3 sm:p-4 text-right">
-                        <button
-                          onClick={() => openEditModal(p)}
-                          className="p-1.5 bg-slate-800 hover:bg-fuchsia-600 text-slate-300 hover:text-white rounded-lg transition"
-                        >
-                          <Edit3 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Analytics Tab */}
-        {activeTab === 'analytics' && (
-          <div className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-5xl mx-auto w-full min-w-0">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-800">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-100">Reports & Analytics</h2>
-                <p className="text-xs text-slate-400">Sales performance, margins, and profit insights</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs">
-                  {(['today', 'week', 'month', 'all'] as const).map((range) => (
+                  {/* Payment Method Selector */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
                     <button
-                      key={range}
-                      onClick={() => setAnalyticsRange(range)}
-                      className={`px-2.5 py-1 rounded-lg capitalize font-semibold transition ${
-                        analyticsRange === range
-                          ? 'bg-purple-600 text-white'
-                          : 'text-slate-400 hover:text-slate-200'
+                      onClick={() => setPaymentMethod('cash')}
+                      className={`py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                        paymentMethod === 'cash'
+                          ? 'bg-emerald-600/20 border-emerald-500 text-emerald-400'
+                          : 'bg-slate-900 border-slate-800 text-slate-400'
                       }`}
                     >
-                      {range}
+                      <DollarSign size={14} /> Cash
                     </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => setIsExportModalOpen(true)}
-                  className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-fuchsia-600/20"
-                >
-                  <Download size={14} /> Export
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div className="bg-purple-900/30 border border-purple-800/40 p-4 rounded-2xl flex flex-col justify-between">
-                <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">
-                  Transaction Count
-                </span>
-                <p className="text-2xl sm:text-3xl font-black text-white mt-2">
-                  {analyticsMetrics.transactionCount}
-                </p>
-              </div>
-
-              <div className="bg-purple-900/30 border border-purple-800/40 p-4 rounded-2xl flex flex-col justify-between">
-                <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">
-                  Avg. Basket Size
-                </span>
-                <p className="text-2xl sm:text-3xl font-black text-white mt-2">
-                  ₱{analyticsMetrics.avgBasketSize.toFixed(2)}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="bg-purple-900/40 border border-purple-800/50 rounded-2xl overflow-hidden">
-                <div
-                  onClick={() => setShowNetSalesBreakdown((prev) => !prev)}
-                  className="p-4 flex items-center justify-between cursor-pointer hover:bg-purple-800/20 transition"
-                >
-                  <div>
-                    <span className="text-xs font-bold text-purple-300 uppercase tracking-wider block">
-                      NET SALES
-                    </span>
-                    <span className="text-xs text-fuchsia-400 font-semibold underline flex items-center gap-1 mt-0.5">
-                      Breakdown {showNetSalesBreakdown ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                    </span>
-                  </div>
-                  <span className="text-xl sm:text-2xl font-black text-white">
-                    ₱{analyticsMetrics.netSalesSum.toFixed(2)}
-                  </span>
-                </div>
-
-                {showNetSalesBreakdown && (
-                  <div className="bg-slate-950/80 border-t border-purple-800/40 p-4 text-xs space-y-2 font-mono">
-                    <p className="font-sans font-bold text-slate-300 mb-2">Summary Breakdown</p>
-                    <div className="flex justify-between text-slate-400">
-                      <span>Gross Sales:</span>
-                      <span className="text-slate-200">₱{analyticsMetrics.grossSalesSum.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-400">
-                      <span>Service Fee:</span>
-                      <span className="text-slate-200">+₱{analyticsMetrics.serviceFeeSum.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-400">
-                      <span>Delivery Fee:</span>
-                      <span className="text-slate-200">+₱{analyticsMetrics.deliveryFeeSum.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-400">
-                      <span>Sales Discount:</span>
-                      <span className="text-rose-400">-₱{analyticsMetrics.discountSum.toFixed(2)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-purple-900/30 border border-purple-800/40 p-4 rounded-2xl flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">
-                  Cost of Product Sold (Puhunan)
-                </span>
-                <span className="text-lg sm:text-xl font-bold text-slate-200">
-                  ₱{analyticsMetrics.copsSum.toFixed(2)}
-                </span>
-              </div>
-
-              <div className="bg-purple-900/30 border border-purple-800/40 p-4 rounded-2xl flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">
-                  Margin (%)
-                </span>
-                <span className="text-lg sm:text-xl font-bold text-emerald-400">
-                  {analyticsMetrics.margin.toFixed(1)}%
-                </span>
-              </div>
-
-              <div className="bg-fuchsia-950/60 border border-fuchsia-800/60 p-4 sm:p-5 rounded-2xl flex items-center justify-between shadow-lg shadow-fuchsia-950/30">
-                <span className="text-xs sm:text-sm font-black text-fuchsia-300 uppercase tracking-wider">
-                  ESTIMATED NET PROFIT
-                </span>
-                <span className="text-2xl sm:text-3xl font-black text-emerald-400">
-                  ₱{analyticsMetrics.profitSum.toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Hardware Settings Tab */}
-        {activeTab === 'settings' && (
-          <div className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-2xl mx-auto w-full min-w-0">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-800">
-              <div className="p-3 bg-fuchsia-600/20 text-fuchsia-400 rounded-xl">
-                <Sliders size={22} />
-              </div>
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold">Hardware & Scanner Settings</h2>
-                <p className="text-xs text-slate-400">Configure default capture preferences</p>
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
-              <div>
-                <h3 className="font-semibold text-slate-100 mb-1 flex items-center gap-2 text-sm">
-                  <ShoppingCart size={16} className="text-fuchsia-400" /> POS Checkout Scanner
-                </h3>
-                <p className="text-xs text-slate-400 mb-4">Primary scanner device for cart scanning.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {[
-                    { id: 'hardware', label: 'Hardware Gun', desc: 'USB/Bluetooth scanner gun' },
-                    { id: 'camera', label: 'Device Camera', desc: 'Built-in camera viewfinder' },
-                    { id: 'manual', label: 'Manual Search', desc: 'Search or key barcode manually' },
-                  ].map((option) => (
                     <button
-                      key={option.id}
-                      onClick={() => setPosScanMethod(option.id as ScanMethod)}
-                      className={`p-3.5 rounded-xl border text-left transition flex flex-col justify-between ${
-                        posScanMethod === option.id
-                          ? 'bg-fuchsia-600/10 border-fuchsia-500 text-white'
-                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                      onClick={() => setPaymentMethod('gcash')}
+                      className={`py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                        paymentMethod === 'gcash'
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-400'
+                          : 'bg-slate-900 border-slate-800 text-slate-400'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-xs text-slate-200">{option.label}</span>
-                        {posScanMethod === option.id && <Check size={16} className="text-fuchsia-400" />}
+                      <CreditCard size={14} /> GCash
+                    </button>
+                  </div>
+
+                  {/* Cash or GCash Input Fields */}
+                  {paymentMethod === 'cash' ? (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-slate-400 font-semibold">
+                        <span>Cash Tendered:</span>
+                        {parsedCash > 0 && <span>Change: ₱{changeDue.toFixed(2)}</span>}
                       </div>
-                      <p className="text-[11px] text-slate-400 leading-tight">{option.desc}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={cashReceived}
+                        onChange={(e) => setCashReceived(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className="text-xs text-slate-400 font-semibold block">GCash Reference No.</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 1002345678"
+                        value={gcashRefNumber}
+                        onChange={(e) => setGcashRefNumber(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono font-bold text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  )}
 
-              {deferredPrompt && (
-                <div className="pt-4 border-t border-slate-800">
-                  <h3 className="font-semibold text-slate-100 mb-1 flex items-center gap-2 text-sm">
-                    <Download size={16} className="text-fuchsia-400" /> Web App Installation
-                  </h3>
-                  <p className="text-xs text-slate-400 mb-3">Install PEDDLR POS as a desktop or mobile application.</p>
+                  {/* Calculation Breakdown */}
+                  <div className="pt-2 border-t border-slate-800/80 space-y-1 text-xs">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Subtotal</span>
+                      <span className="font-mono">₱{subtotal.toFixed(2)}</span>
+                    </div>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between text-fuchsia-400">
+                        <span>Discount</span>
+                        <span className="font-mono">-₱{discountAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {serviceFee > 0 && (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Service Fee</span>
+                        <span className="font-mono">+₱{serviceFee.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {deliveryFee > 0 && (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Delivery Fee</span>
+                        <span className="font-mono">+₱{deliveryFee.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-extrabold text-white pt-1">
+                      <span>NET TOTAL</span>
+                      <span className="font-mono text-base text-fuchsia-400">₱{netSales.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Pay Button */}
                   <button
-                    onClick={handleInstallApp}
-                    className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2"
+                    onClick={handleCheckout}
+                    disabled={cart.length === 0}
+                    className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-lg ${
+                      cart.length > 0
+                        ? 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-fuchsia-600/30'
+                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    }`}
                   >
-                    <Download size={14} /> Install PEDDLR Application
+                    COMPLETE PAYMENT (₱{netSales.toFixed(2)})
                   </button>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        )}
-      </main>
+          )}
+
+          {/* 2. Inventory Tab */}
+          {activeTab === 'inventory' && (
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Inventory Management</h2>
+                  <p className="text-xs text-slate-400">Track stock levels, costs, and product barcodes</p>
+                </div>
+                <button
+                  onClick={() => handleOpenProductModal()}
+                  className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 self-start sm:self-auto shadow-md shadow-fuchsia-600/30"
+                >
+                  <Plus size={16} /> Add Product
+                </button>
+              </div>
+
+              {/* Table Container */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-950/60 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        <th className="p-3.5">Product</th>
+                        <th className="p-3.5">Barcode</th>
+                        <th className="p-3.5">Price</th>
+                        <th className="p-3.5">Cost</th>
+                        <th className="p-3.5">Stock</th>
+                        <th className="p-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-xs">
+                      {products.map((p) => {
+                        const isLow = p.stock <= p.lowStockThreshold;
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-850/50 transition">
+                            <td className="p-3.5 font-bold text-slate-200">
+                              {p.name}
+                              <span className="block text-[10px] font-normal text-slate-500">{p.category || 'General'}</span>
+                            </td>
+                            <td className="p-3.5 font-mono text-slate-400">{p.barcode}</td>
+                            <td className="p-3.5 font-mono text-emerald-400 font-bold">₱{p.price.toFixed(2)}</td>
+                            <td className="p-3.5 font-mono text-slate-400">₱{p.cost.toFixed(2)}</td>
+                            <td className="p-3.5 font-mono">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  isLow ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-300'
+                                }`}
+                              >
+                                {p.stock} {p.unit}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-right space-x-2">
+                              <button
+                                onClick={() => handleOpenProductModal(p)}
+                                className="p-1.5 text-slate-400 hover:text-fuchsia-400 hover:bg-slate-800 rounded-lg transition"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(p.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. Analytics Tab */}
+          {activeTab === 'analytics' && (
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Business Analytics</h2>
+                  <p className="text-xs text-slate-400">Sales performance and financial metrics</p>
+                </div>
+                <button
+                  onClick={() => setIsExportModalOpen(true)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700"
+                >
+                  <Mail size={14} /> Export Report
+                </button>
+              </div>
+
+              {/* KPI Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Total Sales Revenue</p>
+                  <p className="text-2xl font-black font-mono text-emerald-400">₱{totalSalesVal.toFixed(2)}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Gross Profit</p>
+                  <p className="text-2xl font-black font-mono text-fuchsia-400">₱{grossProfit.toFixed(2)}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Total Orders</p>
+                  <p className="text-2xl font-black font-mono text-white">{transactions.length}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Inventory Capital Value</p>
+                  <p className="text-2xl font-black font-mono text-amber-400">₱{totalInventoryCapital.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Transaction Logs */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+                <h3 className="text-sm font-bold text-slate-100 mb-4">Recent Sales Activity</h3>
+                <div className="space-y-2">
+                  {transactions.map((trx) => (
+                    <div
+                      key={trx.id}
+                      className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <span className="font-mono font-bold text-fuchsia-400">{trx.id}</span>
+                        <p className="text-[10px] text-slate-500">
+                          {new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {trx.items.length} items
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-white">₱{trx.netSales.toFixed(2)}</span>
+                        <span className="block text-[10px] uppercase font-bold text-slate-400">{trx.paymentMethod}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. Ledger Tab */}
+          {activeTab === 'ledger' && (
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Utang Customer Ledger</h2>
+                  <p className="text-xs text-slate-400">Track informal credit balances and customer debts</p>
+                </div>
+
+                <div className="flex gap-2">
+                  {(['all', 'utang', 'paid'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => setLedgerFilter(filter)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase transition ${
+                        ledgerFilter === filter
+                          ? 'bg-fuchsia-600 text-white'
+                          : 'bg-slate-900 border border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ledger Entries List */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {ledger
+                  .filter((entry) => {
+                    if (ledgerFilter === 'utang') return entry.status === 'unpaid';
+                    if (ledgerFilter === 'paid') return entry.status === 'paid';
+                    return true;
+                  })
+                  .map((entry) => (
+                    <div key={entry.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-sm text-slate-100">{entry.customerName}</h3>
+                          <p className="text-xs text-slate-400">{entry.phone}</p>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            entry.status === 'unpaid' ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'
+                          }`}
+                        >
+                          {entry.status}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 bg-slate-950 p-2 rounded-lg border border-slate-800">
+                        {entry.description}
+                      </p>
+
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-800">
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">Balance Due</span>
+                          <span className="font-mono font-bold text-sm text-amber-400">₱{entry.amount.toFixed(2)}</span>
+                        </div>
+
+                        {entry.status === 'unpaid' && (
+                          <button
+                            onClick={() =>
+                              setLedger((prev) =>
+                                prev.map((l) => (l.id === entry.id ? { ...l, status: 'paid' } : l))
+                              )
+                            }
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition"
+                          >
+                            Mark Paid
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* 5. Settings Tab */}
+          {activeTab === 'settings' && (
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-2xl mx-auto w-full min-w-0">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-800">
+                <div className="p-3 bg-fuchsia-600/20 text-fuchsia-400 rounded-xl">
+                  <Sliders size={22} />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Hardware & Scanner Settings</h2>
+                  <p className="text-xs text-slate-400">Configure default capture preferences</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                <div>
+                  <h3 className="font-semibold text-slate-100 mb-1 flex items-center gap-2 text-sm">
+                    <ShoppingCart size={16} className="text-fuchsia-400" /> POS Checkout Scanner
+                  </h3>
+                  <p className="text-xs text-slate-400 mb-4">Primary scanner device for cart scanning.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      { id: 'hardware', label: 'Hardware Gun', desc: 'USB/Bluetooth scanner gun' },
+                      { id: 'camera', label: 'Device Camera', desc: 'Built-in camera viewfinder' },
+                      { id: 'manual', label: 'Manual Search', desc: 'Search or key barcode manually' },
+                    ].map((option) => (
+                      <button
+                        key={option.id}
+                        onClick={() => setPosScanMethod(option.id as ScanMethod)}
+                        className={`p-3.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                          posScanMethod === option.id
+                            ? 'bg-fuchsia-600/10 border-fuchsia-500 text-white'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-bold text-xs text-slate-200">{option.label}</span>
+                          {posScanMethod === option.id && <Check size={16} className="text-fuchsia-400" />}
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-tight">{option.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {deferredPrompt && (
+                  <div className="pt-4 border-t border-slate-800">
+                    <h3 className="font-semibold text-slate-100 mb-1 flex items-center gap-2 text-sm">
+                      <Download size={16} className="text-fuchsia-400" /> Web App Installation
+                    </h3>
+                    <p className="text-xs text-slate-400 mb-3">Install PEDDLR POS as a desktop or mobile application.</p>
+                    <button
+                      onClick={handleInstallApp}
+                      className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2"
+                    >
+                      <Download size={14} /> Install PEDDLR Application
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* --- OVERLAY MODALS --- */}
 
       {/* Fee / Discount Setter Modal */}
       {activeFeeModal && (
