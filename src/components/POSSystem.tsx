@@ -658,12 +658,12 @@ const handleDeleteProduct = (id: string) => {
                     </div>
 
                     <button
-                      onClick={() => setIsPosCameraOpen(true)}
-                      className="px-3.5 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0"
-                    >
-                      <Camera size={16} />
-                      <span className="hidden sm:inline">Camera Scan</span>
-                    </button>
+                    onClick={() => setIsPosCameraOpen(true)}
+                    className="px-3.5 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0"
+                  >
+                    <Camera size={16} />
+                    <span className="hidden sm:inline landscape:inline">Camera Scan</span>
+                  </button>
                   </div>
                 </div>
 
