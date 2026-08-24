@@ -5,7 +5,6 @@ import CameraScanner from './CameraScanner';
  import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/db';
 import {
-  
   ShoppingCart,
   Package,
   BarChart3,
@@ -35,7 +34,9 @@ import {
   FileText,
   CheckCircle2,
   Clock,
-  Tag
+  Tag,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 // --- Types & Interfaces ---
