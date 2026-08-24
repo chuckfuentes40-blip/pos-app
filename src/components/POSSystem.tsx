@@ -495,14 +495,16 @@ const handleDeleteProduct = (id: string) => {
           {/* Logo & Header */}
           <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-pink-500 flex items-center justify-center font-black text-white text-lg shadow-lg shadow-fuchsia-600/30">
-                P
-              </div>
+              <img
+                src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/main/Inaki.png"
+                alt="IÑAKI Logo"
+                className="h-9 w-9 rounded-xl object-cover shadow-lg shadow-fuchsia-600/30 border border-slate-700/50"
+              />
               <div>
                 <h1 className="font-extrabold text-base tracking-wide bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
                   IÑAKI
                 </h1>
-                <p className="text-[10px] text-slate-400 font-medium">SARI-SARi Store Terminal</p>
+                <p className="text-[10px] text-slate-400 font-medium">SARI-SARI Store Terminal</p>
               </div>
             </div>
             <button
