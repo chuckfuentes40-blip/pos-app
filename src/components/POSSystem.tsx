@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import CameraScanner from './CameraScanner';
- import { supabase } from './supabase'; // Ensure supabase is imported
-import { db } from './db';             // Ensure db is imported
+ import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/db';
 import {
   
   ShoppingCart,
