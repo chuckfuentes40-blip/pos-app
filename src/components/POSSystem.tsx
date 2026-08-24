@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import CameraScanner from './CameraScanner';
+ import { supabase } from './supabase'; // Ensure supabase is imported
+import { db } from './db';             // Ensure db is imported
 import {
   
   ShoppingCart,
@@ -387,9 +389,6 @@ useEffect(() => {
     }
     setIsModalOpen(true);
   };
-
- import { supabase } from './supabase'; // Ensure supabase is imported
-import { db } from './db';             // Ensure db is imported
 
 const handleSaveProduct = async (e: React.FormEvent) => {
   e.preventDefault();
