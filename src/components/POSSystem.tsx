@@ -147,7 +147,10 @@ export default function POSSystem() {
 
   // Data state
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+  const saved = localStorage.getItem('pos_transactions');
+  return saved ? JSON.parse(saved) : [];
+});
   const [ledger, setLedger] = useState<LedgerEntry[]>(INITIAL_LEDGER);
 
   // POS Cart State
@@ -342,17 +345,15 @@ const handleThemeChange = (newTheme: 'dark' | 'light') => {
 };
 
 useEffect(() => {
-  const loadProducts = async () => {
+  const loadInitialData = async () => {
     try {
-      // 1. Try fetching live data from Supabase
       if (navigator.onLine) {
-        const { data, error } = await supabase.from('products').select('*');
+        // 1. Load Products from Supabase
+        const { data: prodData, error: prodError } = await supabase.from('products').select('*');
+        if (!prodError && prodData) {
+          setProducts(prodData);
 
-        if (!error && data) {
-          setProducts(data);
-
-          // Cache in local Dexie database for offline use
-          const dexieFormat = data.map((p) => ({
+          const dexieFormat = prodData.map((p) => ({
             id: p.id,
             name: p.name,
             price: p.price,
@@ -361,21 +362,42 @@ useEffect(() => {
             barcode: p.barcode,
           }));
           await db.products.bulkPut(dexieFormat);
+        }
+
+        // 2. Load Transactions from Supabase
+        const { data: trxData, error: trxError } = await supabase
+          .from('transactions')
+          .select('*')
+          .order('timestamp', { ascending: false });
+
+        if (!trxError && trxData) {
+          setTransactions(trxData);
+          if (db.transactions) {
+            await db.transactions.bulkPut(trxData);
+          }
           return;
         }
       }
 
-      // 2. Fallback to Dexie IndexedDB if offline or Supabase fails
-      const localItems = await db.products.toArray();
-      if (localItems.length > 0) {
-        setProducts(localItems as any);
+      // 3. Fallback to Dexie IndexedDB if offline
+      const localProducts = await db.products.toArray();
+      if (localProducts.length > 0) {
+        setProducts(localProducts as any);
+      }
+
+      if (db.transactions) {
+        const localTransactions = await db.transactions.toArray();
+        if (localTransactions.length > 0) {
+          localTransactions.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          setTransactions(localTransactions as any);
+        }
       }
     } catch (err) {
-      console.error('Error loading products:', err);
+      console.error('Error loading initial data:', err);
     }
   };
 
-  loadProducts();
+  loadInitialData();
 }, []);
 
 // Load persisted products from LocalStorage on mount
@@ -449,7 +471,7 @@ useEffect(() => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const handleCheckout = () => {
+ const handleCheckout = async () => {
     if (cart.length === 0) return;
     if (paymentMethod === 'cash' && parsedCash < netSales) {
       alert('Cash received is insufficient!');
@@ -472,19 +494,31 @@ useEffect(() => {
       customer: customer.name ? { ...customer } : undefined
     };
 
-    // Deduct stock
-    setProducts((prev) =>
-      prev.map((prod) => {
-        const cartItem = cart.find((c) => c.id === prod.id);
-        if (cartItem) {
-          return { ...prod, stock: Math.max(0, prod.stock - cartItem.quantity) };
-        }
-        return prod;
-      })
-    );
+    // 1. Optimistically update local UI state
+    const updatedProducts = products.map((prod) => {
+      const cartItem = cart.find((c) => c.id === prod.id);
+      if (cartItem) {
+        return { ...prod, stock: Math.max(0, prod.stock - cartItem.quantity) };
+      }
+      return prod;
+    });
 
+    setProducts(updatedProducts);
     setTransactions((prev) => [newTransaction, ...prev]);
     setReceiptData(newTransaction);
+
+    // 2. Persist directly to Supabase
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .insert([newTransaction]);
+
+      if (error) {
+        console.error('Supabase Save Error:', error.message);
+      }
+    } catch (err) {
+      console.error('Network Error saving to Supabase:', err);
+    }
 
     // Reset Cart and Order State
     setCart([]);
