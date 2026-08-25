@@ -1560,7 +1560,7 @@ const handleDeleteProduct = (id: string) => {
           overflow: visible !important;
         }
 
-        /* 2. Kill GPU filters & backdrops that cause blank print canvases */
+        /* 2. Kill GPU filters & backdrops */
         *, *::before, *::after {
           backdrop-filter: none !important;
           -webkit-backdrop-filter: none !important;
@@ -1569,26 +1569,26 @@ const handleDeleteProduct = (id: string) => {
           text-shadow: none !important;
         }
 
-        /* 3. Hide all page contents */
+        /* 3. Hide non-receipt elements */
         body * {
           visibility: hidden !important;
         }
 
-        /* 4. Force receipt and all internal nodes to render */
+        /* 4. Force receipt nodes to render */
         #printable-receipt,
         #printable-receipt * {
           visibility: visible !important;
           color: #000000 !important;
         }
 
-        /* 5. Anchor receipt directly to page origin */
+        /* 5. Anchor receipt with extra bottom feed padding (12mm) */
         #printable-receipt {
-          position: fixed !important;
+          position: relative !important;
           left: 0 !important;
           top: 0 !important;
           width: 58mm !important;
           max-width: 58mm !important;
-          padding: 2mm 3mm !important;
+          padding: 2mm 3mm 12mm 3mm !important;
           margin: 0 !important;
           box-sizing: border-box !important;
           background: #ffffff !important;
@@ -1596,7 +1596,7 @@ const handleDeleteProduct = (id: string) => {
           z-index: 999999 !important;
         }
 
-        /* 6. Hide action buttons completely */
+        /* 6. Hide action buttons */
         .print-hide,
         .print-hide * {
           display: none !important;
@@ -1704,6 +1704,9 @@ const handleDeleteProduct = (id: string) => {
         <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
         <p className="text-gray-600 print:text-black">Please Come Again</p>
       </div>
+
+      {/* Bottom spacing buffer for thermal printer paper cut distance */}
+      <div className="h-4 print:h-8" />
 
       {/* Screen Control Buttons */}
       <div className="mt-3 flex gap-2 print:hidden print-hide">
