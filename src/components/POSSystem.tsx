@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { createClient } from '@supabase/supabase-js';
 import {
   ShoppingCart,
   Package,
@@ -12,19 +13,22 @@ import {
   Minus,
   Trash2,
   Camera,
-  Wifi,
   X,
   Mail,
   Download,
   Sun,
   Moon,
-  Check,
   RefreshCw,
-  DollarSign,
-  TrendingUp,
-  Edit,
-  Printer
+  Printer,
+  Wifi,
+  CreditCard,
+  Edit
 } from 'lucide-react';
+
+// --- SUPABASE CLIENT INITIALIZATION ---
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'YOUR_SUPABASE_URL';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // --- TYPES & INTERFACES ---
 export type ScanMethod = 'hardware' | 'camera' | 'manual';
@@ -108,7 +112,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
         detectBarcode();
       }
     } catch (err: any) {
-      setCameraError('Camera access denied or unavailable. Ensure HTTPS or local environment.');
+      setCameraError('Camera access denied or unavailable.');
     }
   };
 
@@ -209,16 +213,14 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
 
 // --- MAIN POS SYSTEM COMPONENT ---
 export default function POSSystem() {
-  // Navigation & Theme
   const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'analytics' | 'ledger' | 'settings'>('pos');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // Sample Inventory State
-  const [products, setProducts] = useState<Product[]>([
-    { id: '1', name: 'San Miguel Light 330ml', barcode: '4800001', category: 'Beverages', costPrice: 45, price: 60, stock: 48 },
-    { id: '2', name: 'Sammies Potato Chips 100g', barcode: '4800002', category: 'Snacks', costPrice: 20, price: 35, stock: 15 },
-    { id: '3', name: 'Instant Noodles Seafood 70g', barcode: '4800003', category: 'Grocery', costPrice: 12, price: 18, stock: 5 },
-  ]);
+  // Supabase Data States
+  const [products, setProducts] = useState<Product[]>([]);
+  const [transactions, setTransactions] = useState<ReceiptData[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
 
   // Cart & POS State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -230,17 +232,17 @@ export default function POSSystem() {
   const [extraFee, setExtraFee] = useState<number>(0);
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [cashTendered, setCashTendered] = useState<number>(0);
+  const [gcashRefNumber, setGcashRefNumber] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash'>('cash');
   const [customer, setCustomer] = useState<{ name?: string; phone?: string; address?: string; notes?: string }>({});
 
-  // Modals & UI Controls
+  // Modals & Controls
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isPosCameraOpen, setIsPosCameraOpen] = useState(false);
+  const [isProductCameraOpen, setIsProductCameraOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-  const [activeFeeModal, setActiveFeeModal] = useState<'discount' | 'fee' | 'delivery' | null>(null);
-  const [feeInputValue, setFeeInputValue] = useState('');
 
-  // Add / Edit Product Modal State
+  // Product Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productForm, setProductForm] = useState({
@@ -252,7 +254,7 @@ export default function POSSystem() {
     stock: 0,
   });
 
-  // Export Analytics Modal State
+  // Export Analytics State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportTab, setExportTab] = useState<'sales' | 'movement' | 'capital'>('sales');
   const [exportEmail, setExportEmail] = useState('manager@inaki-store.ph');
@@ -264,8 +266,80 @@ export default function POSSystem() {
     { id: 'l2', customerName: 'Maria Santos', phone: '09189876543', description: 'Grocery items', amount: 320, status: 'paid' },
   ]);
 
-  // PWA Prompt
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  // Fetch Supabase data on mount
+  useEffect(() => {
+    fetchProducts();
+    fetchTransactions();
+  }, []);
+
+  // Fetch Products from `products` table
+  const fetchProducts = async () => {
+    setIsLoadingProducts(true);
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching products:', error);
+      } else if (data) {
+        setProducts(
+          data.map((p) => ({
+            id: p.id,
+            name: p.name,
+            barcode: p.barcode || '',
+            category: 'General',
+            costPrice: Number(p.cost || 0),
+            price: Number(p.price || 0),
+            stock: Number(p.stock || 0),
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Database connection error:', err);
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  };
+
+  // Fetch Transactions from `transactions` table
+  const fetchTransactions = async () => {
+    setIsLoadingTransactions(true);
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching transactions:', error);
+      } else if (data) {
+        const mappedData: ReceiptData[] = data.map((t: any) => ({
+          id: t.id,
+          timestamp: t.timestamp,
+          items: t.items || [],
+          subtotal: Number(t.subtotal || 0),
+          discount: Number(t.discount || 0),
+          serviceFee: Number(t.servicefee || 0),
+          deliveryFee: Number(t.deliveryfee || 0),
+          netSales: Number(t.netsales || 0),
+          paymentMethod: t.paymentmethod,
+          cashReceived: Number(t.cashreceived || 0),
+          changeDue: Number(t.changedue || 0),
+          gcashRefNumber: t.gcashrefnumber || '',
+          customer: t.customer,
+        }));
+        setTransactions(mappedData);
+      }
+    } catch (err) {
+      console.error('Error syncing transactions:', err);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -280,7 +354,17 @@ export default function POSSystem() {
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const netTotal = Math.max(0, subtotal - discount + extraFee + deliveryFee);
 
-  // Cart Functions
+  // Analytics Dynamic Calculations
+  const totalSales = transactions.reduce((acc, t) => acc + t.netSales, 0);
+  const gcashTransactions = transactions.filter((t) => t.paymentMethod === 'gcash');
+  const gcashTotalSales = gcashTransactions.reduce((acc, t) => acc + t.netSales, 0);
+  const gcashCount = gcashTransactions.length;
+  const estimatedProfit = transactions.reduce((acc, t) => {
+    const totalCost = t.items.reduce((cAcc, item) => cAcc + (item.costPrice || 0) * item.quantity, 0);
+    return acc + (t.netSales - totalCost);
+  }, 0);
+
+  // Cart Handlers
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
@@ -311,7 +395,7 @@ export default function POSSystem() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  // Product Add / Edit Handlers
+  // Product Database Actions (Supabase)
   const handleOpenAddProduct = () => {
     setEditingProduct(null);
     setProductForm({ name: '', barcode: '', category: 'General', costPrice: 0, price: 0, stock: 0 });
@@ -331,33 +415,65 @@ export default function POSSystem() {
     setIsProductModalOpen(true);
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingProduct) {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === editingProduct.id ? { ...p, ...productForm } : p))
-      );
+      const { error } = await supabase
+        .from('products')
+        .update({
+          name: productForm.name,
+          barcode: productForm.barcode,
+          price: productForm.price,
+          cost: productForm.costPrice,
+          stock: productForm.stock,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingProduct.id);
+
+      if (error) {
+        alert('Failed to update product in database.');
+      } else {
+        fetchProducts();
+      }
     } else {
-      const newEntry: Product = {
-        id: `prod_${Date.now()}`,
-        ...productForm,
-      };
-      setProducts((prev) => [newEntry, ...prev]);
+      const { error } = await supabase.from('products').insert([
+        {
+          name: productForm.name,
+          barcode: productForm.barcode,
+          price: productForm.price,
+          cost: productForm.costPrice,
+          stock: productForm.stock,
+        },
+      ]);
+
+      if (error) {
+        alert('Failed to add product to database.');
+      } else {
+        fetchProducts();
+      }
     }
     setIsProductModalOpen(false);
   };
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (confirm('Are you sure you want to delete this product?')) {
-      setProducts((prev) => prev.filter((p) => p.id !== id));
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) {
+        alert('Failed to delete product.');
+      } else {
+        fetchProducts();
+      }
     }
   };
 
-  // Payment Execution
-  const handleCompleteTransaction = () => {
+  // Complete & Persist Transaction (Writes to `transactions` & `inventory_ledger`)
+  const handleCompleteTransaction = async () => {
+    const trxId = `TRX-${Math.floor(10000 + Math.random() * 90000)}`;
+    const timestamp = new Date().toISOString();
+
     const receipt: ReceiptData = {
-      id: `INV-${Date.now().toString().slice(-6)}`,
-      timestamp: new Date().toISOString(),
+      id: trxId,
+      timestamp,
       items: [...cart],
       subtotal,
       discount,
@@ -365,21 +481,79 @@ export default function POSSystem() {
       deliveryFee,
       netSales: netTotal,
       paymentMethod,
-      cashReceived: paymentMethod === 'cash' ? cashTendered : netTotal,
-      changeDue: paymentMethod === 'cash' ? Math.max(0, cashTendered - netTotal) : 0,
+      cashReceived: paymentMethod === 'cash' ? cashTendered : undefined,
+      changeDue: paymentMethod === 'cash' ? Math.max(0, cashTendered - netTotal) : undefined,
+      gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : undefined,
       customer,
     };
 
-    // Deduct stock levels
-    setProducts((prev) =>
-      prev.map((p) => {
-        const cartMatch = cart.find((c) => c.id === p.id);
-        if (cartMatch) {
-          return { ...p, stock: Math.max(0, p.stock - cartMatch.quantity) };
+    try {
+      // 1. Insert transaction into `transactions` table
+      const { error: trxError } = await supabase.from('transactions').insert([
+        {
+          id: trxId,
+          timestamp,
+          items: cart,
+          subtotal,
+          discount,
+          servicefee: extraFee,
+          deliveryfee: deliveryFee,
+          netsales: netTotal,
+          paymentmethod: paymentMethod,
+          cashreceived: paymentMethod === 'cash' ? cashTendered : null,
+          changedue: paymentMethod === 'cash' ? Math.max(0, cashTendered - netTotal) : null,
+          gcashrefnumber: paymentMethod === 'gcash' ? gcashRefNumber : null,
+          customer: customer.name ? customer : null,
+        },
+      ]);
+
+      if (trxError) console.error('Failed transaction insert:', trxError);
+
+      // 2. Insert into `sales` and `sale_items` tables
+      const { data: salesData } = await supabase.from('sales').insert([
+        {
+          total_amount: netTotal,
+          payment_method: paymentMethod,
+          customer_name: customer.name || 'Walk-in Customer',
+          created_at: timestamp,
         }
-        return p;
-      })
-    );
+      ]).select();
+
+      if (salesData && salesData.length > 0) {
+        const saleId = salesData[0].id;
+        const saleItemsPayload = cart.map((item) => ({
+          sale_id: saleId,
+          product_id: item.id,
+          quantity: item.quantity,
+          unit_price: item.price,
+        }));
+        await supabase.from('sale_items').insert(saleItemsPayload);
+      }
+
+      // 3. Deduct Stock & Write to `inventory_ledger`
+      for (const item of cart) {
+        const newStock = Math.max(0, item.stock - item.quantity);
+
+        // Update product stock
+        await supabase.from('products').update({ stock: newStock }).eq('id', item.id);
+
+        // Log to inventory_ledger
+        await supabase.from('inventory_ledger').insert([
+          {
+            product_id: item.id,
+            change_qty: -item.quantity,
+            reason: `POS Sale (${trxId})`,
+            created_at: timestamp,
+          },
+        ]);
+      }
+
+      // Refresh database tables
+      fetchProducts();
+      fetchTransactions();
+    } catch (err) {
+      console.error('Supabase persistence error:', err);
+    }
 
     setReceiptData(receipt);
     setCart([]);
@@ -387,33 +561,9 @@ export default function POSSystem() {
     setExtraFee(0);
     setDeliveryFee(0);
     setCashTendered(0);
+    setGcashRefNumber('');
     setCustomer({});
     setIsPaymentModalOpen(false);
-  };
-
-  // Print Handlers
-  const handleBluetoothPrint = async () => {
-    alert('Connecting to Bluetooth Thermal Printer...');
-  };
-
-  const handleThemeChange = (selectedTheme: 'dark' | 'light') => {
-    setTheme(selectedTheme);
-  };
-
-  const handleInstallApp = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(() => setDeferredPrompt(null));
-    }
-  };
-
-  const handleApplyFeeModal = () => {
-    const val = Number(feeInputValue) || 0;
-    if (activeFeeModal === 'discount') setDiscount(val);
-    if (activeFeeModal === 'fee') setExtraFee(val);
-    if (activeFeeModal === 'delivery') setDeliveryFee(val);
-    setActiveFeeModal(null);
-    setFeeInputValue('');
   };
 
   const filteredProducts = products.filter(
@@ -427,11 +577,10 @@ export default function POSSystem() {
       {/* Top Header Navigation */}
       <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <img src="/Inaki.png" alt="IÑAKI Logo" className="h-8 w-8 rounded-lg object-cover border border-slate-700" />
+          <div className="h-8 w-8 rounded-lg bg-fuchsia-600 flex items-center justify-center font-black text-white text-sm">I</div>
           <h1 className="font-black text-lg tracking-wide text-white">IÑAKI <span className="text-fuchsia-500">POS</span></h1>
         </div>
 
-        {/* Navigation Tabs */}
         <nav className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold">
           {[
             { id: 'pos', label: 'POS', icon: ShoppingCart },
@@ -462,14 +611,13 @@ export default function POSSystem() {
         {/* --- 1. POS TAB --- */}
         {activeTab === 'pos' && (
           <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-            {/* Product Selection Area */}
             <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto min-w-0">
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-3 text-slate-500" size={16} />
                   <input
                     type="text"
-                    placeholder="Search name or barcode..."
+                    placeholder="Search product name or scan barcode..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-fuchsia-500"
@@ -483,27 +631,30 @@ export default function POSSystem() {
                 </button>
               </div>
 
-              {/* Product Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filteredProducts.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => addToCart(product)}
-                    className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 rounded-2xl p-3.5 text-left transition flex flex-col justify-between space-y-2 group"
-                  >
-                    <div>
-                      <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{product.category}</p>
-                      <h3 className="font-bold text-xs text-slate-200 group-hover:text-fuchsia-400 transition line-clamp-2">{product.name}</h3>
-                    </div>
-                    <div className="flex justify-between items-end pt-2 border-t border-slate-800/60">
-                      <span className="font-mono font-bold text-sm text-amber-400">₱{product.price.toFixed(2)}</span>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 10 ? 'bg-slate-800 text-slate-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                        {product.stock} left
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {isLoadingProducts ? (
+                <div className="p-12 text-center text-slate-500 text-xs">Loading products from Supabase...</div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {filteredProducts.map((product) => (
+                    <button
+                      key={product.id}
+                      onClick={() => addToCart(product)}
+                      className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 rounded-2xl p-3.5 text-left transition flex flex-col justify-between space-y-2 group"
+                    >
+                      <div>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{product.barcode || 'NO BARCODE'}</p>
+                        <h3 className="font-bold text-xs text-slate-200 group-hover:text-fuchsia-400 transition line-clamp-2">{product.name}</h3>
+                      </div>
+                      <div className="flex justify-between items-end pt-2 border-t border-slate-800/60">
+                        <span className="font-mono font-bold text-sm text-amber-400">₱{product.price.toFixed(2)}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 5 ? 'bg-slate-800 text-slate-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                          {product.stock} left
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Cart Panel */}
@@ -517,7 +668,6 @@ export default function POSSystem() {
                 </span>
               </div>
 
-              {/* Cart List */}
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
                 {cart.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2">
@@ -544,7 +694,6 @@ export default function POSSystem() {
                 )}
               </div>
 
-              {/* Cart Summary Footer */}
               <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3">
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between text-slate-400"><span>Subtotal</span><span className="font-mono">₱{subtotal.toFixed(2)}</span></div>
@@ -573,7 +722,7 @@ export default function POSSystem() {
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-bold">Inventory Management</h2>
-                <p className="text-xs text-slate-400">Manage stock, cost prices, and barcode IDs</p>
+                <p className="text-xs text-slate-400">Manage stock, cost prices, and barcodes directly in Supabase</p>
               </div>
               <button
                 onClick={handleOpenAddProduct}
@@ -621,28 +770,93 @@ export default function POSSystem() {
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-bold">Sales & Profit Analytics</h2>
-                <p className="text-xs text-slate-400">Real-time revenue performance metrics</p>
+                <p className="text-xs text-slate-400">Live transaction server logs synced with Supabase</p>
               </div>
-              <button
-                onClick={() => setIsExportModalOpen(true)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
-              >
-                <Download size={14} /> Export Report
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchTransactions}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5"
+                >
+                  <RefreshCw size={14} className={isLoadingTransactions ? 'animate-spin' : ''} /> Sync Data
+                </button>
+                <button
+                  onClick={() => setIsExportModalOpen(true)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
+                >
+                  <Download size={14} /> Export Report
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Metrics Overview Cards including GCash Card */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block">Total Sales</span>
-                <span className="font-mono text-2xl font-bold text-emerald-400">₱1,250.00</span>
+                <span className="text-slate-400 text-xs block font-semibold">Total Revenue</span>
+                <span className="font-mono text-2xl font-bold text-emerald-400">₱{totalSales.toFixed(2)}</span>
+                <span className="text-[10px] text-slate-500 block font-semibold">{transactions.length} total transactions</span>
               </div>
-              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block">Estimated Profit</span>
-                <span className="font-mono text-2xl font-bold text-fuchsia-400">₱420.00</span>
+
+              {/* GCash Payment Analytics Card */}
+              <div className="bg-slate-900 border border-blue-500/30 p-4 rounded-2xl space-y-1 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/30">
+                <div className="flex justify-between items-center">
+                  <span className="text-blue-300 text-xs block font-semibold">GCash Payments</span>
+                  <CreditCard size={18} className="text-blue-400" />
+                </div>
+                <span className="font-mono text-2xl font-bold text-blue-400">₱{gcashTotalSales.toFixed(2)}</span>
+                <span className="text-[10px] text-blue-300/80 block font-semibold">{gcashCount} GCash transactions</span>
               </div>
+
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block">Transactions</span>
-                <span className="font-mono text-2xl font-bold text-amber-400">14</span>
+                <span className="text-slate-400 text-xs block font-semibold">Estimated Profit</span>
+                <span className="font-mono text-2xl font-bold text-fuchsia-400">₱{estimatedProfit.toFixed(2)}</span>
+                <span className="text-[10px] text-slate-500 block font-semibold">Net revenue - cost</span>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+                <span className="text-slate-400 text-xs block font-semibold">Total Transactions</span>
+                <span className="font-mono text-2xl font-bold text-amber-400">{transactions.length}</span>
+                <span className="text-[10px] text-slate-500 block font-semibold">Server log entries</span>
+              </div>
+            </div>
+
+            {/* Server Synced Transactions Table */}
+            <div className="space-y-3">
+              <h3 className="font-bold text-sm text-slate-200">Supabase Transaction Log</h3>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                {transactions.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-xs">
+                    {isLoadingTransactions ? 'Loading server transactions...' : 'No processed transactions found.'}
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[10px]">
+                      <tr>
+                        <th className="p-3.5">Invoice ID</th>
+                        <th className="p-3.5">Date & Time</th>
+                        <th className="p-3.5">Method</th>
+                        <th className="p-3.5">GCash Ref #</th>
+                        <th className="p-3.5">Items</th>
+                        <th className="p-3.5 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {transactions.map((tx) => (
+                        <tr key={tx.id} className="hover:bg-slate-800/40 transition">
+                          <td className="p-3.5 font-mono text-slate-300 font-bold">{tx.id}</td>
+                          <td className="p-3.5 text-slate-400 text-[11px]">{new Date(tx.timestamp).toLocaleString('en-PH')}</td>
+                          <td className="p-3.5 uppercase font-bold">
+                            <span className={`px-2 py-0.5 rounded text-[10px] ${tx.paymentMethod === 'gcash' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                              {tx.paymentMethod}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono text-slate-400 text-[11px]">{tx.gcashRefNumber || '-'}</td>
+                          <td className="p-3.5 text-slate-400">{tx.items.length} items</td>
+                          <td className="p-3.5 text-right font-mono font-bold text-amber-400">₱{tx.netSales.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>
@@ -739,27 +953,19 @@ export default function POSSystem() {
                   </button>
                 ))}
               </div>
-
-              {deferredPrompt && (
-                <div className="pt-4 border-t border-slate-800">
-                  <button onClick={handleInstallApp} className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2">
-                    <Download size={14} /> Install Web App
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="font-semibold text-slate-100 text-sm">Theme Appearance</h3>
               <div className="grid grid-cols-2 gap-3 max-w-sm">
                 <button
-                  onClick={() => handleThemeChange('dark')}
+                  onClick={() => setTheme('dark')}
                   className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-bold transition ${theme === 'dark' ? 'border-fuchsia-500 bg-fuchsia-950/20 text-white' : 'border-slate-800 text-slate-400'}`}
                 >
                   <Moon size={16} /> Dark Mode
                 </button>
                 <button
-                  onClick={() => handleThemeChange('light')}
+                  onClick={() => setTheme('light')}
                   className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-bold transition ${theme === 'light' ? 'border-fuchsia-500 bg-fuchsia-950/20 text-white' : 'border-slate-800 text-slate-400'}`}
                 >
                   <Sun size={16} /> Light Mode
@@ -770,7 +976,7 @@ export default function POSSystem() {
         )}
       </main>
 
-      {/* --- PAYMENT POP-UP MODAL --- */}
+      {/* --- PAYMENT MODAL --- */}
       {isPaymentModalOpen &&
         createPortal(
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
@@ -778,7 +984,7 @@ export default function POSSystem() {
               <div className="flex justify-between items-center border-b border-slate-800 pb-4">
                 <div>
                   <h3 className="text-lg font-bold text-white">Process Payment</h3>
-                  <p className="text-xs text-slate-400">Select payment method and complete order</p>
+                  <p className="text-xs text-slate-400">Select payment method and save to Supabase</p>
                 </div>
                 <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition">✕</button>
               </div>
@@ -832,7 +1038,7 @@ export default function POSSystem() {
                 </button>
               </div>
 
-              {paymentMethod === 'cash' && (
+              {paymentMethod === 'cash' ? (
                 <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
                   <div className="flex justify-between items-center text-xs text-slate-400">
                     <span>Cash Tendered:</span>
@@ -846,6 +1052,17 @@ export default function POSSystem() {
                     value={cashTendered || ''}
                     onChange={(e) => setCashTendered(Number(e.target.value))}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-emerald-400 font-mono font-bold text-xl focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              ) : (
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                  <label className="text-xs text-slate-400 block font-semibold">GCash Reference Number (`gcashrefnumber`):</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 53462828644"
+                    value={gcashRefNumber}
+                    onChange={(e) => setGcashRefNumber(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-blue-400 font-mono font-bold text-base focus:outline-none focus:border-blue-500"
                   />
                 </div>
               )}
@@ -867,14 +1084,14 @@ export default function POSSystem() {
                     : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30'
                 }`}
               >
-                Confirm & Generate Receipt
+                Confirm & Save to Server
               </button>
             </div>
           </div>,
           document.body
         )}
 
-      {/* --- PRINTABLE RECEIPT MODAL --- */}
+      {/* --- RECEIPT MODAL --- */}
       {receiptData && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block overflow-y-auto">
           <style>{`
@@ -910,6 +1127,9 @@ export default function POSSystem() {
             <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
               <div className="flex justify-between font-bold text-xs pt-0.5"><span>TOTAL:</span><span>P{receiptData.netSales.toFixed(2)}</span></div>
               <div className="flex justify-between text-gray-800 uppercase pt-0.5 text-[9px]"><span>PAYMENT:</span><span className="font-bold">{receiptData.paymentMethod}</span></div>
+              {receiptData.gcashRefNumber && (
+                <div className="flex justify-between text-gray-800 text-[9px]"><span>GCASH REF:</span><span className="font-bold">{receiptData.gcashRefNumber}</span></div>
+              )}
             </div>
 
             <div className="pt-2 text-center text-[9px] space-y-0.5">
@@ -918,7 +1138,6 @@ export default function POSSystem() {
             </div>
 
             <div className="flex items-center justify-center gap-2 mt-5 w-full print-hide">
-              <button onClick={handleBluetoothPrint} className="bg-blue-600 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5"><Wifi size={14} /> BT Print</button>
               <button onClick={() => window.print()} className="bg-fuchsia-600 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5"><Printer size={14} /> Print</button>
               <button onClick={() => setReceiptData(null)} className="bg-slate-800 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl">Close</button>
             </div>
@@ -950,26 +1169,23 @@ export default function POSSystem() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Barcode ID</label>
+              <div>
+                <label className="text-xs font-semibold text-slate-400 block mb-1">Barcode ID</label>
+                <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="480000123456"
                     value={productForm.barcode}
                     onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-100 focus:outline-none focus:border-fuchsia-500"
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-100 focus:outline-none focus:border-fuchsia-500"
                   />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Category</label>
-                  <input
-                    type="text"
-                    placeholder="Beverages"
-                    value={productForm.category}
-                    onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-fuchsia-500"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsProductCameraOpen(true)}
+                    className="bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 px-3 rounded-xl flex items-center justify-center hover:bg-fuchsia-600/30 transition"
+                  >
+                    <Camera size={16} />
+                  </button>
                 </div>
               </div>
 
@@ -1012,14 +1228,14 @@ export default function POSSystem() {
                 type="submit"
                 className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-fuchsia-600/20 mt-2"
               >
-                {editingProduct ? 'Save Product Changes' : 'Add to Inventory'}
+                {editingProduct ? 'Save Changes' : 'Add to Supabase Database'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- CAMERA SCANNER MODAL --- */}
+      {/* --- CAMERA SCANNER MODALS --- */}
       <CameraScanner
         isOpen={isPosCameraOpen}
         onClose={() => setIsPosCameraOpen(false)}
@@ -1039,7 +1255,16 @@ export default function POSSystem() {
         }}
       />
 
-      {/* --- EXPORT REPORT MODAL --- */}
+      <CameraScanner
+        isOpen={isProductCameraOpen}
+        onClose={() => setIsProductCameraOpen(false)}
+        onScan={(scannedBarcode) => {
+          setProductForm((prev) => ({ ...prev, barcode: String(scannedBarcode).trim() }));
+          setIsProductCameraOpen(false);
+        }}
+      />
+
+      {/* --- EXPORT MODAL --- */}
       {isExportModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
