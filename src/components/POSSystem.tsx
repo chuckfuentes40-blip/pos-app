@@ -192,6 +192,30 @@ export default function POSSystem() {
   const [formUnit, setFormUnit] = useState('pcs');
   const [formBarcode, setFormBarcode] = useState('');
 
+  // ✅ PLACE IT HERE (Inside POSSystem, after state definitions)
+  const handleOpenProductModal = (product?: Product) => {
+    if (product) {
+      setEditingProduct(product);
+      setFormName(product.name);
+      setFormPrice(product.price.toString());
+      setFormCost(product.cost ? product.cost.toString() : '');
+      setFormStock(product.stock.toString());
+      setFormLowStock(product.lowStockThreshold ? product.lowStockThreshold.toString() : '5');
+      setFormUnit(product.unit || 'pcs');
+      setFormBarcode(product.barcode || '');
+    } else {
+      setEditingProduct(null);
+      setFormName('');
+      setFormPrice('');
+      setFormCost('');
+      setFormStock('');
+      setFormLowStock('5');
+      setFormUnit('pcs');
+      setFormBarcode('');
+    }
+    setIsModalOpen(true);
+  };
+
   // Export / Analytics / Receipt Modal state
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportTab, setExportTab] = useState<'sales' | 'movement' | 'capital'>('sales');
@@ -247,29 +271,7 @@ export default function POSSystem() {
       return;
     }
 
-     // Product Add / Edit Modal Handler
-  const handleOpenProductModal = (product?: Product) => {
-    if (product) {
-      setEditingProduct(product);
-      setFormName(product.name);
-      setFormPrice(product.price.toString());
-      setFormCost(product.cost ? product.cost.toString() : '');
-      setFormStock(product.stock.toString());
-      setFormLowStock(product.lowStockThreshold ? product.lowStockThreshold.toString() : '5');
-      setFormUnit(product.unit || 'pcs');
-      setFormBarcode(product.barcode || '');
-    } else {
-      setEditingProduct(null);
-      setFormName('');
-      setFormPrice('');
-      setFormCost('');
-      setFormStock('');
-      setFormLowStock('5');
-      setFormUnit('pcs');
-      setFormBarcode('');
-    }
-    setIsModalOpen(true);
-  };
+    
 
     // 4. Build ESC/POS Raw Data Stream (32 character width for 58mm)
     const encoder = new TextEncoder();
