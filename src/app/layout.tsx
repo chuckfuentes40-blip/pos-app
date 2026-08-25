@@ -1,7 +1,7 @@
 import './globals.css';
 import SyncManager from '@/components/SyncManager';
 
-const LOGO_URL = 'https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/main/Inaki.png';
+const LOGO_URL = 'https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/public/Inaki.png';
 
 export const metadata = {
   title: 'IÑAKI SARI-SARI STORE',

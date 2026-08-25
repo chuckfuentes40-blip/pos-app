@@ -582,12 +582,19 @@ useEffect(() => {
   const handleSaveProduct = async (e: React.FormEvent) => {
   e.preventDefault();
 
-  // Safe ID generator that works on all mobile & desktop browsers
-  const productId = editingProduct
-    ? editingProduct.id
-    : typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `prod_${Date.now()}`;
+  // Helper to ensure IDs always conform to standard UUID v4 format
+  const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
+
+  const productId = editingProduct ? editingProduct.id : generateUUID();
 
   const productData: Product = {
     id: productId,
@@ -602,7 +609,7 @@ useEffect(() => {
   };
 
   try {
-    // 1. Save locally to Dexie IndexedDB FIRST (Guarantees offline reliability)
+    // 1. Save locally to Dexie IndexedDB FIRST
     if (db.products) {
       await db.products.put({
         id: productData.id,
@@ -614,38 +621,38 @@ useEffect(() => {
       });
     }
 
-    // 2. Update React State immediately so UI updates
+    // 2. Update React State immediately
     if (editingProduct) {
       setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? productData : p)));
     } else {
       setProducts((prev) => [productData, ...prev]);
     }
 
-    // 3. Close Modal immediately
+    // 3. Close Modal
     setIsModalOpen(false);
     setIsInlineScanning(false);
 
-    // 4. Background Sync to Supabase (Non-blocking)
+    // 4. Background Sync to Supabase (EXACT match to table schema)
     if (navigator.onLine) {
-      // Map properties to match both camelCase and snake_case database schema
       const supabasePayload = {
         id: productData.id,
+        barcode: productData.barcode || null,
         name: productData.name,
         price: productData.price,
         cost: productData.cost,
         stock: productData.stock,
-        unit: productData.unit,
-        barcode: productData.barcode,
-        category: productData.category,
-        lowStockThreshold: productData.lowStockThreshold,
-        low_stock_threshold: productData.lowStockThreshold,
         min_stock: productData.lowStockThreshold,
+        updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase.from('products').upsert([supabasePayload]);
+      const { error } = await supabase
+        .from('products')
+        .upsert(supabasePayload, { onConflict: 'id' });
 
       if (error) {
-        console.warn('Supabase sync warning (Saved locally instead):', error.message);
+        console.error('Supabase Sync Error:', error.message);
+        alert(`Saved locally, but failed to sync to Supabase: ${error.message}`);
+        return;
       }
     }
 
@@ -716,7 +723,7 @@ const handleDeleteProduct = (id: string) => {
         <div className={`p-4 sm:p-5 border-b ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'} flex items-center justify-between`}>
           <div className="flex items-center gap-3">
             <img
-              src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/main/Inaki.png"
+              src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/public/Inaki.png"
               alt="IÑAKI Logo"
               className="h-9 w-9 rounded-xl object-cover shadow-lg shadow-fuchsia-600/30 border border-slate-700/50"
             />
@@ -1798,7 +1805,7 @@ const handleDeleteProduct = (id: string) => {
       {/* Header */}
       <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
         <img
-          src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/main/Inaki.png"
+          src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/public/Inaki.png"
           alt="IÑAKI Logo"
           className="h-8 w-8 mx-auto rounded-lg object-cover mb-1 border border-gray-200 print:border-none"
         />
