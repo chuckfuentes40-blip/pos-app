@@ -791,6 +791,17 @@ const handleDeleteProduct = (id: string) => {
     return sum;
   }, 0);
 
+  // GCash and Cash transaction counts
+  const gcashTxCount = filteredTransactions.filter((t) => {
+    const method = (t.paymentMethod || (t as any).paymentmethod || '').toLowerCase();
+    return method === 'gcash';
+  }).length;
+
+  const cashTxCount = filteredTransactions.filter((t) => {
+    const method = (t.paymentMethod || (t as any).paymentmethod || '').toLowerCase();
+    return method === 'cash' || method === '';
+  }).length;
+
   const totalCostVal = filteredTransactions.reduce((sum, t) => {
     const items = Array.isArray(t.items) ? t.items : [];
     const costOfItems = items.reduce((c, i) => {
@@ -1505,8 +1516,8 @@ const handleDeleteProduct = (id: string) => {
               </div>
             </div>
 
-            {/* KPI Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+           {/* KPI Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               {/* Total Revenue */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
                 <p className="text-xs text-slate-400 font-semibold mb-1">Total Sales Revenue</p>
@@ -1521,6 +1532,24 @@ const handleDeleteProduct = (id: string) => {
                 <p className="text-2xl font-black font-mono text-blue-400">
                   ₱{(totalGCashSalesVal || 0).toFixed(2)}
                 </p>
+                <p className="text-[10px] text-slate-500 font-medium mt-1">
+                  {gcashTxCount} {gcashTxCount === 1 ? 'transaction' : 'transactions'}
+                </p>
+              </div>
+
+              {/* Payment Methods Breakdown */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p className="text-xs text-slate-400 font-semibold mb-1">Transaction Breakdown</p>
+                <div className="space-y-1 mt-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400 font-medium">💵 Cash:</span>
+                    <span className="font-mono font-bold text-white">{cashTxCount}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-blue-400 font-medium">📱 GCash:</span>
+                    <span className="font-mono font-bold text-blue-400">{gcashTxCount}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Gross Profit */}
