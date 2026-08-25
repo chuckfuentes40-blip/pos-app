@@ -4,8 +4,11 @@ export interface LocalProduct {
   id: string;
   name: string;
   price: number;
+  cost?: number;             // <-- Add this line
   stock: number;
-  min_stock: number;
+  min_stock?: number;
+  unit?: string;             // <-- Add this line (prevents future TS errors)
+  category?: string;         // <-- Add this line
   barcode?: string;
 }
 

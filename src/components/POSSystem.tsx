@@ -55,6 +55,7 @@ export interface Product {
   unit: string;
   barcode: string;
   category?: string;
+  
 }
 
 export interface CartItem extends Product {
@@ -1416,7 +1417,7 @@ const handleDeleteProduct = (id: string) => {
                       {/* Inventory Table Actions Column */}
                     <button
                       type="button"
-                      onClick={() => handleOpenProductModal(products)}
+                      onClick={() => handleOpenProductModal()}
                       className="p-1.5 text-slate-400 hover:text-fuchsia-400 rounded-lg hover:bg-slate-800 transition"
                       title="Edit Product"
                     >
@@ -2111,29 +2112,6 @@ const handleDeleteProduct = (id: string) => {
       </div>
     </div>
   );
-
-  {/* Camera Scanner Modal Component */}
-            <CameraScanner
-              isOpen={isPosCameraOpen}
-              onClose={() => setIsPosCameraOpen(false)}
-              onScan={(scannedBarcode) => {
-                const cleanCode = String(scannedBarcode).trim();
-                const foundProduct = products.find(
-                  (p) =>
-                    String(p.barcode || '').trim() === cleanCode ||
-                    String(p.id || '').trim() === cleanCode
-                );
-
-                if (foundProduct) {
-                  addToCart(foundProduct);
-                } else {
-                  setSearchQuery(cleanCode);
-                  alert(`No product found with barcode: ${cleanCode}`);
-                }
-
-                setIsPosCameraOpen(false);
-              }}
-            />
       {/* Fee / Discount Setter Modal */}
       {activeFeeModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
