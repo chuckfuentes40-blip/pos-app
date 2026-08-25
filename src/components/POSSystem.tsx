@@ -1384,7 +1384,7 @@ const handleDeleteProduct = (id: string) => {
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
                     >
-                      COMPLETE PAYMENT (₱{netSales.toFixed(2)})
+                      COMPLETE PAYMENT 
                     </button>
                   </div>
                 </div>
