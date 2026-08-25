@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, X, AlertCircle } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 interface CameraScannerProps {
   isOpen: boolean;
@@ -11,26 +12,35 @@ interface CameraScannerProps {
 
 export default function CameraScanner({ isOpen, onClose, onScan }: CameraScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const hasScannedRef = useRef<boolean>(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Enumerate video devices
+  // 1. Enumerate video devices and auto-select back camera
   useEffect(() => {
     if (!isOpen) return;
 
     const getDevices = async () => {
       try {
+        // Request temporary stream to unlock device labels on mobile
         const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
         const allDevices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = allDevices.filter((d) => d.kind === 'videoinput');
         
         setDevices(videoDevices);
-        if (videoDevices.length > 0 && !selectedDeviceId) {
-          setSelectedDeviceId(videoDevices[0].deviceId);
+
+        // Auto-select rear/back camera if available
+        const backCamera = videoDevices.find(
+          (d) => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment')
+        );
+
+        if (backCamera) {
+          setSelectedDeviceId(backCamera.deviceId);
+        } else if (videoDevices.length > 0) {
+          setSelectedDeviceId(videoDevices[videoDevices.length - 1].deviceId); // Last camera is usually main camera
         }
 
         tempStream.getTracks().forEach((t) => t.stop());
@@ -42,7 +52,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
     getDevices();
   }, [isOpen]);
 
-  // Start video stream & scanner logic
+  // 2. Start Scanner using ZXing Reader
   useEffect(() => {
     if (!isOpen) return;
 
@@ -51,15 +61,10 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
     setLoading(true);
     setError(null);
 
-    // Stop existing stream if switching devices
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
+    const reader = new BrowserMultiFormatReader();
+    codeReaderRef.current = reader;
 
-    let animationFrameId: number;
-
-    const startCamera = async () => {
+    const startScanning = async () => {
       try {
         const constraints: MediaStreamConstraints = {
           video: selectedDeviceId
@@ -67,122 +72,58 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
             : { facingMode: { ideal: 'environment' } },
         };
 
-        let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        }
+        if (!videoRef.current) return;
 
-        if (!isMounted) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
+        // Decode continuously from video stream
+        await reader.decodeFromConstraints(constraints, videoRef.current, (result, err) => {
+          if (!isMounted) return;
 
-        streamRef.current = stream;
+          if (result && !hasScannedRef.current) {
+            const scannedText = result.getText().trim();
+            if (scannedText.length >= 3) {
+              hasScannedRef.current = true;
+              
+              // Stop stream immediately on scan
+              stopScanner();
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = async () => {
-            try {
-              await videoRef.current?.play();
-              if (isMounted) setLoading(false);
-            } catch (pErr) {
-              console.error('Play error:', pErr);
+              if (onScan) onScan(scannedText);
+              onClose();
             }
-          };
-        }
+          }
+        });
+
+        if (isMounted) setLoading(false);
       } catch (err: any) {
-        console.error('Camera access error:', err);
+        console.error('Camera scanner error:', err);
         if (isMounted) {
           setError(
             err.name === 'NotAllowedError'
               ? 'Camera access denied in browser settings.'
-              : 'Unable to start video feed. Switch camera or open app in a new tab.'
+              : 'Unable to start camera feed. Check device permissions.'
           );
           setLoading(false);
         }
       }
     };
 
-    startCamera();
-
-    // Barcode detection with safe cleanup upon match
-    let lastCode = '';
-    let consecutiveMatches = 0;
-
-    if ('BarcodeDetector' in window) {
-      const barcodeDetector = new (window as any).BarcodeDetector({
-        formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a'],
-      });
-
-      const detectBarcode = async () => {
-        if (
-          videoRef.current &&
-          videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA &&
-          !hasScannedRef.current
-        ) {
-          try {
-            const barcodes = await barcodeDetector.detect(videoRef.current);
-            if (barcodes.length > 0) {
-              const scannedValue = barcodes[0].rawValue.trim();
-
-              if (scannedValue.length >= 3) {
-                if (scannedValue === lastCode) {
-                  consecutiveMatches++;
-                } else {
-                  lastCode = scannedValue;
-                  consecutiveMatches = 1;
-                }
-
-                // Verify across 2 consecutive frames
-                if (consecutiveMatches >= 2 && !hasScannedRef.current) {
-                  hasScannedRef.current = true;
-
-                  // 1. Stop animation loop
-                  if (animationFrameId) cancelAnimationFrame(animationFrameId);
-
-                  // 2. Immediately release hardware camera tracks to prevent mobile crash
-                  if (streamRef.current) {
-                    streamRef.current.getTracks().forEach((track) => track.stop());
-                    streamRef.current = null;
-                  }
-                  if (videoRef.current) {
-                    videoRef.current.srcObject = null;
-                  }
-
-                  // 3. Trigger callback and close
-                  if (onScan) onScan(scannedValue);
-                  onClose();
-                  return;
-                }
-              }
-            } else {
-              consecutiveMatches = 0;
-              lastCode = '';
-            }
-          } catch {
-            // Frame skip catch
-          }
-        }
-
-        if (isMounted && !hasScannedRef.current) {
-          animationFrameId = requestAnimationFrame(detectBarcode);
-        }
-      };
-
-      animationFrameId = requestAnimationFrame(detectBarcode);
-    }
+    startScanning();
 
     return () => {
       isMounted = false;
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
+      stopScanner();
     };
   }, [isOpen, selectedDeviceId]);
+
+  const stopScanner = () => {
+    if (codeReaderRef.current) {
+      codeReaderRef.current = null;
+    }
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -198,10 +139,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
           </div>
           <button
             onClick={() => {
-              if (streamRef.current) {
-                streamRef.current.getTracks().forEach((track) => track.stop());
-                streamRef.current = null;
-              }
+              stopScanner();
               onClose();
             }}
             className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
@@ -227,6 +165,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
                 className="w-full h-full object-cover"
               />
 
+              {/* Viewfinder Overlay */}
               <div className="absolute inset-8 border-2 border-emerald-400/80 rounded-lg pointer-events-none animate-pulse flex items-center justify-center">
                 <div className="w-full h-0.5 bg-emerald-400/80" />
               </div>

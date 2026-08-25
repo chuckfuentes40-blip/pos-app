@@ -298,6 +298,24 @@ const handleScanMethodChange = (method: ScanMethod) => {
   const posVideoRef = useRef<HTMLVideoElement | null>(null);
   const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Helper function for scan beep tone
+const playScanBeep = () => {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1800, ctx.currentTime); // High pitch beep
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.08); // Short 80ms duration
+  } catch {
+    // Web Audio unsupported or muted
+  }
+};
+
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
  const handleBluetoothPrint = async () => {
@@ -2246,26 +2264,26 @@ const handleDeleteProduct = (id: string) => {
       )}
 
           <CameraScanner
-        isOpen={isPosCameraOpen}
-        onClose={() => setIsPosCameraOpen(false)}
-        onScan={(scannedBarcode) => {
-          // 1. Find the matching product in your products list
-          const foundProduct = products.find(
-            (product) => product.barcode === scannedBarcode || product.id === scannedBarcode
-          );
+            isOpen={isPosCameraOpen}
+            onClose={() => setIsPosCameraOpen(false)}
+            onScan={(scannedBarcode) => {
+              playScanBeep();
 
-          if (foundProduct) {
-            // 2. Automatically add the product to the shopping cart
-            addToCart(foundProduct); // Replace with your actual cart function name if different
-          } else {
-            // 3. Fallback: If product isn't found, populate search bar so you can see what failed
-            setSearchQuery(scannedBarcode);
-            alert(`No product found with barcode: ${scannedBarcode}`);
-          }
+              const cleanCode = String(scannedBarcode).trim();
+              const foundProduct = products.find(
+                (product) =>
+                  String(product.barcode || '').trim() === cleanCode ||
+                  String(product.id || '').trim() === cleanCode
+              );
 
-          setIsPosCameraOpen(false);
-        }}
-      />
+              if (foundProduct) {
+                addToCart(foundProduct);
+              } else {
+                setSearchQuery(cleanCode);
+                alert(`No product found with barcode: ${cleanCode}`);
+              }
+            }}
+          />
 
       {/* Export Report Modal */}
       {isExportModalOpen && (
