@@ -372,8 +372,8 @@ useEffect(() => {
 
         if (!trxError && trxData) {
           setTransactions(trxData);
-          if (db.transaction) {
-            await db.transaction.bulkPut(trxData);
+          if (db.sales) {
+            await db.sales.bulkPut(trxData);
           }
           return;
         }
@@ -385,8 +385,8 @@ useEffect(() => {
         setProducts(localProducts as any);
       }
 
-      if (db.transaction) {
-        const localTransactions = await db.transaction.toArray();
+      if (db.sales) {
+        const localTransactions = await db.sales.toArray();
         if (localTransactions.length > 0) {
           localTransactions.sort(
             (a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
