@@ -1664,7 +1664,11 @@ const handleDeleteProduct = (id: string) => {
               </div>
             </div>
           )}
-          {/* Large Font Checkout & Payment Modal */}
+         
+        </main>
+      </div>
+
+       {/* Large Font Checkout & Payment Modal */}
           {isPaymentModalOpen && (
             <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
               <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150">
@@ -1842,8 +1846,6 @@ const handleDeleteProduct = (id: string) => {
               </div>
             </div>
           )}
-        </main>
-      </div>
 
       {/* --- OVERLAY MODALS --- */}
 
