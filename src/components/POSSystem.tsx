@@ -754,15 +754,31 @@ const handleDeleteProduct = (id: string) => {
     const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCat;
   });
+// Analytics Metrics (Guarded against undefined values & Supabase lowercase keys)
+  const totalSalesVal = (transactions || []).reduce((sum, t) => {
+    const val = Number(t.netSales ?? (t as any).netsales ?? 0);
+    return sum + (isNaN(val) ? 0 : val);
+  }, 0);
 
-  // Analytics Metrics
-  const totalSalesVal = transactions.reduce((sum, t) => sum + t.netSales, 0);
-  const totalCostVal = transactions.reduce((sum, t) => {
-    const costOfItems = t.items.reduce((c, i) => c + i.cost * i.quantity, 0);
+  const totalCostVal = (transactions || []).reduce((sum, t) => {
+    const items = Array.isArray(t.items) ? t.items : [];
+    const costOfItems = items.reduce((c, i) => {
+      const cost = Number(i.cost ?? (i as any).unit_cost ?? 0);
+      const qty = Number(i.quantity ?? (i as any).qty ?? 1);
+      const total = cost * qty;
+      return c + (isNaN(total) ? 0 : total);
+    }, 0);
     return sum + costOfItems;
   }, 0);
+
   const grossProfit = totalSalesVal - totalCostVal;
-  const totalInventoryCapital = products.reduce((sum, p) => sum + p.cost * p.stock, 0);
+
+  const totalInventoryCapital = (products || []).reduce((sum, p) => {
+    const cost = Number(p.cost ?? 0);
+    const stock = Number(p.stock ?? 0);
+    const val = cost * stock;
+    return sum + (isNaN(val) ? 0 : val);
+  }, 0);
 
   return (
   <div
@@ -1300,78 +1316,85 @@ const handleDeleteProduct = (id: string) => {
             </div>
           )}
 
-          {/* 3. Analytics Tab */}
-          {activeTab === 'analytics' && (
-            <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg sm:text-xl font-bold">Business Analytics</h2>
-                  <p className="text-xs text-slate-400">Sales performance and financial metrics</p>
-                </div>
-                <button
-                  onClick={() => setIsExportModalOpen(true)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700"
-                >
-                  <Mail size={14} /> Export Report
-                </button>
+         {/* 3. Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg sm:text-xl font-bold">Business Analytics</h2>
+                <p className="text-xs text-slate-400">Sales performance and financial metrics</p>
               </div>
-
-              {/* KPI Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <p className="text-xs text-slate-400 font-semibold mb-1">Total Sales Revenue</p>
-                  <p className="text-2xl font-black font-mono text-emerald-400">₱{totalSalesVal.toFixed(2)}</p>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <p className="text-xs text-slate-400 font-semibold mb-1">Gross Profit</p>
-                  <p className="text-2xl font-black font-mono text-fuchsia-400">₱{grossProfit.toFixed(2)}</p>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <p className="text-xs text-slate-400 font-semibold mb-1">Total Orders</p>
-                  <p className="text-2xl font-black font-mono text-white">{transactions.length}</p>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <p className="text-xs text-slate-400 font-semibold mb-1">Inventory Capital Value</p>
-                  <p className="text-2xl font-black font-mono text-amber-400">₱{totalInventoryCapital.toFixed(2)}</p>
-                </div>
-              </div>
-
-              {/* Transaction Logs */}
-<div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
-  <h3 className="text-sm font-bold text-slate-100 mb-4">Recent Sales Activity</h3>
-  <div className="space-y-2">
-    {(transactions || []).map((trx) => {
-      // Safe fallback for netSales from both camelCase and lowercase Supabase response
-      const netSalesVal = Number(trx.netSales ?? (trx as any).netsales ?? 0);
-      const itemsCount = Array.isArray(trx.items) ? trx.items.length : 0;
-      const payment = trx.paymentMethod || (trx as any).paymentmethod || 'CASH';
-
-      return (
-        <div
-          key={trx.id}
-          className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs"
-        >
-          <div>
-            <span className="font-mono font-bold text-fuchsia-400">{trx.id}</span>
-            <p className="text-[10px] text-slate-500">
-              {trx.timestamp ? new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'} • {itemsCount} items
-            </p>
-          </div>
-          <div className="text-right">
-            <span className="font-mono font-bold text-white">
-              ₱{netSalesVal.toFixed(2)}
-            </span>
-            <span className="block text-[10px] uppercase font-bold text-slate-400">
-              {payment}
-            </span>
-          </div>
-        </div>
-      );
-    })}
-  </div>
-</div>
+              <button
+                onClick={() => setIsExportModalOpen(true)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700"
+              >
+                <Mail size={14} /> Export Report
+              </button>
             </div>
-          )}
+
+            {/* KPI Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p className="text-xs text-slate-400 font-semibold mb-1">Total Sales Revenue</p>
+                <p className="text-2xl font-black font-mono text-emerald-400">
+                  ₱{(totalSalesVal || 0).toFixed(2)}
+                </p>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p className="text-xs text-slate-400 font-semibold mb-1">Gross Profit</p>
+                <p className="text-2xl font-black font-mono text-fuchsia-400">
+                  ₱{(grossProfit || 0).toFixed(2)}
+                </p>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p className="text-xs text-slate-400 font-semibold mb-1">Total Orders</p>
+                <p className="text-2xl font-black font-mono text-white">
+                  {(transactions || []).length}
+                </p>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p className="text-xs text-slate-400 font-semibold mb-1">Inventory Capital Value</p>
+                <p className="text-2xl font-black font-mono text-amber-400">
+                  ₱{(totalInventoryCapital || 0).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            {/* Transaction Logs */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+              <h3 className="text-sm font-bold text-slate-100 mb-4">Recent Sales Activity</h3>
+              <div className="space-y-2">
+                {(transactions || []).map((trx) => {
+                  const netSalesVal = Number(trx.netSales ?? (trx as any).netsales ?? 0);
+                  const itemsCount = Array.isArray(trx.items) ? trx.items.length : 0;
+                  const payment = trx.paymentMethod || (trx as any).paymentmethod || 'CASH';
+
+                  return (
+                    <div
+                      key={trx.id}
+                      className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <span className="font-mono font-bold text-fuchsia-400">{trx.id}</span>
+                        <p className="text-[10px] text-slate-500">
+                          {trx.timestamp ? new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'} • {itemsCount} items
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-white">
+                          ₱{netSalesVal.toFixed(2)}
+                        </span>
+                        <span className="block text-[10px] uppercase font-bold text-slate-400">
+                          {payment}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
           {/* 4. Ledger Tab */}
           {activeTab === 'ledger' && (
