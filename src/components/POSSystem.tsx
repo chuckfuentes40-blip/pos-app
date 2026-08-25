@@ -771,15 +771,18 @@ const handleCheckout = async (action: 'bt_print' | 'standard_print' | 'close' = 
   try {
     // 1. Save locally to Dexie IndexedDB FIRST
     if (db.products) {
-      await db.products.put({
-        id: productData.id,
-        name: productData.name,
-        price: productData.price,
-        stock: productData.stock,
-        min_stock: productData.lowStockThreshold,
-        barcode: productData.barcode,
-      });
-    }
+  await db.products.put({
+    id: productData.id,
+    name: productData.name,
+    price: productData.price,
+    cost: productData.cost,
+    stock: productData.stock,
+    min_stock: productData.lowStockThreshold,
+    unit: productData.unit,         // <-- Added
+    category: productData.category, // <-- Added
+    barcode: productData.barcode,
+  });
+}
 
     // 2. Update React State immediately
     if (editingProduct) {
@@ -1120,8 +1123,8 @@ const handleDeleteProduct = (id: string) => {
                       {product.category || 'Item'}
                     </span>
                     {isLowStock && !isOutOfStock && (
-                      <span className="text-[9px] bg-amber-500/20 text-amber-400 font-bold px-1.5 py-0.5 rounded">
-                        Low
+                      <span className={`text-[10px] font-mono ${isOutOfStock ? 'text-rose-400 font-bold' : 'text-slate-400'}`}>
+                        {isOutOfStock ? 'OUT OF STOCK' : `${product.stock} ${product.unit || 'pcs'}`}
                       </span>
                     )}
                   </div>
@@ -1410,12 +1413,15 @@ const handleDeleteProduct = (id: string) => {
                       </span>
                     </td>
                     <td className="p-3.5 text-right space-x-2">
-                      <button
-                        onClick={() => handleOpenProductModal(p)}
-                        className="p-1.5 text-slate-400 hover:text-fuchsia-400 hover:bg-slate-800 rounded-lg transition"
-                      >
-                        <Edit size={14} />
-                      </button>
+                      {/* Inventory Table Actions Column */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenProductModal(products)}
+                      className="p-1.5 text-slate-400 hover:text-fuchsia-400 rounded-lg hover:bg-slate-800 transition"
+                      title="Edit Product"
+                    >
+                      <Edit size={16} />
+                    </button>
                       <button
                         onClick={() => handleDeleteProduct(p.id)}
                         className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
@@ -2106,7 +2112,28 @@ const handleDeleteProduct = (id: string) => {
     </div>
   );
 
+  {/* Camera Scanner Modal Component */}
+            <CameraScanner
+              isOpen={isPosCameraOpen}
+              onClose={() => setIsPosCameraOpen(false)}
+              onScan={(scannedBarcode) => {
+                const cleanCode = String(scannedBarcode).trim();
+                const foundProduct = products.find(
+                  (p) =>
+                    String(p.barcode || '').trim() === cleanCode ||
+                    String(p.id || '').trim() === cleanCode
+                );
 
+                if (foundProduct) {
+                  addToCart(foundProduct);
+                } else {
+                  setSearchQuery(cleanCode);
+                  alert(`No product found with barcode: ${cleanCode}`);
+                }
+
+                setIsPosCameraOpen(false);
+              }}
+            />
       {/* Fee / Discount Setter Modal */}
       {activeFeeModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -2133,145 +2160,6 @@ const handleDeleteProduct = (id: string) => {
                 Apply
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Product Form Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => {
-                setIsInlineScanning(false);
-                setIsModalOpen(false);
-              }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-lg"
-            >
-              <X size={18} />
-            </button>
-
-            <h3 className="text-base sm:text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
-              <Package size={18} className="text-fuchsia-400" />
-              {editingProduct ? 'Edit Product' : 'Add Product'}
-            </h3>
-
-            <form onSubmit={handleSaveProduct} className="space-y-3.5">
-              <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">Product Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Coke Mismo 300ml"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Selling Price (SRP) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    placeholder="0.00"
-                    value={formPrice}
-                    onChange={(e) => setFormPrice(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Cost (Puhunan)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={formCost}
-                    onChange={(e) => setFormCost(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Initial Stock</label>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    value={formStock}
-                    onChange={(e) => setFormStock(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Low Stock</label>
-                  <input
-                    type="number"
-                    placeholder="5"
-                    value={formLowStock}
-                    onChange={(e) => setFormLowStock(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Unit</label>
-                  <select
-                    value={formUnit}
-                    onChange={(e) => setFormUnit(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                  >
-                    <option value="pcs">pcs</option>
-                    <option value="pack">pack</option>
-                    <option value="box">box</option>
-                    <option value="kg">kg</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">Barcode Code</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Barcode code"
-                    value={formBarcode}
-                    onChange={(e) => setFormBarcode(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setIsInlineScanning((prev) => !prev)}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition border ${
-                      isInlineScanning
-                        ? 'bg-rose-600/20 text-rose-400 border-rose-500/30'
-                        : 'bg-fuchsia-600/20 text-fuchsia-400 border-fuchsia-500/30'
-                    }`}
-                  >
-                    <Camera size={14} /> Scan
-                  </button>
-                </div>
-
-                {/* Integrated Working Camera Scanner Component */}
-                <CameraScanner
-                  isOpen={isInlineScanning}
-                  onClose={() => setIsInlineScanning(false)}
-                  onScan={(scannedBarcode) => {
-                    setFormBarcode(scannedBarcode);
-                    setIsInlineScanning(false);
-                  }}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-md shadow-fuchsia-600/30"
-              >
-                SAVE PRODUCT
-              </button>
-            </form>
           </div>
         </div>
       )}

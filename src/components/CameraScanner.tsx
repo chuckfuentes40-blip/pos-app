@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, X, AlertCircle } from 'lucide-react';
-import { BrowserMultiFormatReader } from '@zxing/browser';
+import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 
 interface CameraScannerProps {
   isOpen: boolean;
@@ -12,47 +12,14 @@ interface CameraScannerProps {
 
 export default function CameraScanner({ isOpen, onClose, onScan }: CameraScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef = useRef<IScannerControls | null>(null);
   const hasScannedRef = useRef<boolean>(false);
+  
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // 1. Enumerate video devices and auto-select back camera
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const getDevices = async () => {
-      try {
-        // Request temporary stream to unlock device labels on mobile
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        const allDevices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = allDevices.filter((d) => d.kind === 'videoinput');
-        
-        setDevices(videoDevices);
-
-        // Auto-select rear/back camera if available
-        const backCamera = videoDevices.find(
-          (d) => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment')
-        );
-
-        if (backCamera) {
-          setSelectedDeviceId(backCamera.deviceId);
-        } else if (videoDevices.length > 0) {
-          setSelectedDeviceId(videoDevices[videoDevices.length - 1].deviceId); // Last camera is usually main camera
-        }
-
-        tempStream.getTracks().forEach((t) => t.stop());
-      } catch (err) {
-        console.warn('Could not enumerate camera devices:', err);
-      }
-    };
-
-    getDevices();
-  }, [isOpen]);
-
-  // 2. Start Scanner using ZXing Reader
   useEffect(() => {
     if (!isOpen) return;
 
@@ -61,45 +28,59 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
     setLoading(true);
     setError(null);
 
-    const reader = new BrowserMultiFormatReader();
-    codeReaderRef.current = reader;
+    const codeReader = new BrowserMultiFormatReader();
 
     const startScanning = async () => {
       try {
+        if (!videoRef.current) return;
+
+        // Clean up previous controls if existing
+        if (controlsRef.current) {
+          controlsRef.current.stop();
+          controlsRef.current = null;
+        }
+
         const constraints: MediaStreamConstraints = {
           video: selectedDeviceId
             ? { deviceId: { exact: selectedDeviceId } }
             : { facingMode: { ideal: 'environment' } },
         };
 
-        if (!videoRef.current) return;
+        // 1. Start scanner & capture controls reference
+        const controls = await codeReader.decodeFromConstraints(
+          constraints,
+          videoRef.current,
+          (result) => {
+            if (!isMounted) return;
 
-        // Decode continuously from video stream
-        await reader.decodeFromConstraints(constraints, videoRef.current, (result, err) => {
-          if (!isMounted) return;
-
-          if (result && !hasScannedRef.current) {
-            const scannedText = result.getText().trim();
-            if (scannedText.length >= 3) {
-              hasScannedRef.current = true;
-              
-              // Stop stream immediately on scan
-              stopScanner();
-
-              if (onScan) onScan(scannedText);
-              onClose();
+            if (result && !hasScannedRef.current) {
+              const scannedText = result.getText().trim();
+              if (scannedText.length >= 3) {
+                hasScannedRef.current = true;
+                stopScanner();
+                if (onScan) onScan(scannedText);
+                onClose();
+              }
             }
           }
-        });
+        );
 
-        if (isMounted) setLoading(false);
+        controlsRef.current = controls;
+
+        // 2. Fetch available camera devices safely AFTER stream starts
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = allDevices.filter((d) => d.kind === 'videoinput');
+        if (isMounted) {
+          setDevices(videoDevices);
+          setLoading(false);
+        }
       } catch (err: any) {
         console.error('Camera scanner error:', err);
         if (isMounted) {
           setError(
             err.name === 'NotAllowedError'
               ? 'Camera access denied in browser settings.'
-              : 'Unable to start camera feed. Check device permissions.'
+              : 'Unable to start camera feed. Ensure you are on HTTPS or localhost.'
           );
           setLoading(false);
         }
@@ -115,8 +96,9 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
   }, [isOpen, selectedDeviceId]);
 
   const stopScanner = () => {
-    if (codeReaderRef.current) {
-      codeReaderRef.current = null;
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
     }
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
@@ -128,7 +110,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
       <div className="relative w-full max-w-sm rounded-2xl bg-slate-900 p-5 border border-slate-800 shadow-2xl text-white">
         
         {/* Header */}
@@ -138,6 +120,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
             <h3 className="text-sm font-bold">Camera Scanner</h3>
           </div>
           <button
+            type="button"
             onClick={() => {
               stopScanner();
               onClose();
@@ -180,13 +163,14 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
         </div>
 
         {/* Camera Selector */}
-        {devices.length > 0 && (
+        {devices.length > 1 && (
           <div className="mt-3">
             <select
               value={selectedDeviceId}
               onChange={(e) => setSelectedDeviceId(e.target.value)}
               className="w-full bg-slate-800 text-slate-200 text-xs rounded-lg p-2 border border-slate-700 outline-none"
             >
+              <option value="">Default (Rear Camera)</option>
               {devices.map((device, index) => (
                 <option key={device.deviceId || index} value={device.deviceId}>
                   {device.label || `Camera ${index + 1}`}
