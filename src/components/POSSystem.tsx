@@ -723,9 +723,9 @@ const handleDeleteProduct = (id: string) => {
         <div className={`p-4 sm:p-5 border-b ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'} flex items-center justify-between`}>
           <div className="flex items-center gap-3">
             <img
-              src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/public/Inaki.png"
+              src="/Inaki.png"
               alt="IÑAKI Logo"
-              className="h-9 w-9 rounded-xl object-cover shadow-lg shadow-fuchsia-600/30 border border-slate-700/50"
+              className="h-8 w-8 mx-auto rounded-lg object-cover mb-1 border border-gray-200 print:border-none"
             />
             <div>
               <h1 className={`font-extrabold text-base tracking-wide ${
@@ -1804,8 +1804,8 @@ const handleDeleteProduct = (id: string) => {
     >
       {/* Header */}
       <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
-        <img
-          src="https://raw.githubusercontent.com/chuckfuentes40-blip/pos-app/public/Inaki.png"
+       <img
+          src="/Inaki.png"
           alt="IÑAKI Logo"
           className="h-8 w-8 mx-auto rounded-lg object-cover mb-1 border border-gray-200 print:border-none"
         />
