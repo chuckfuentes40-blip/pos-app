@@ -502,65 +502,98 @@ useEffect(() => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
- const handleCheckout = async () => {
-    if (cart.length === 0) return;
-    if (paymentMethod === 'cash' && parsedCash < netSales) {
-      alert('Cash received is insufficient!');
-      return;
-    }
+const handleCheckout = async () => {
+  if (cart.length === 0) return;
+  if (paymentMethod === 'cash' && parsedCash < netSales) {
+    alert('Cash received is insufficient!');
+    return;
+  }
 
-    const newTransaction: Transaction = {
-      id: `TRX-${Date.now().toString().slice(-5)}`,
-      timestamp: new Date().toISOString(),
-      items: [...cart],
-      subtotal,
-      discount: discountAmount,
-      serviceFee,
-      deliveryFee,
-      netSales,
-      paymentMethod,
-      cashReceived: paymentMethod === 'cash' ? parsedCash : undefined,
-      changeDue: paymentMethod === 'cash' ? changeDue : undefined,
-      gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : undefined,
-      customer: customer.name ? { ...customer } : undefined
-    };
+  const transactionId = `TRX-${Date.now().toString().slice(-5)}`;
+  const currentTimestamp = new Date().toISOString();
 
-    // 1. Optimistically update local UI state
-    const updatedProducts = products.map((prod) => {
-      const cartItem = cart.find((c) => c.id === prod.id);
-      if (cartItem) {
-        return { ...prod, stock: Math.max(0, prod.stock - cartItem.quantity) };
-      }
-      return prod;
-    });
-
-    setProducts(updatedProducts);
-    setTransactions((prev) => [newTransaction, ...prev]);
-    setReceiptData(newTransaction);
-
-    // 2. Persist directly to Supabase
-    try {
-      const { error } = await supabase
-        .from('transactions')
-        .insert([newTransaction]);
-
-      if (error) {
-        console.error('Supabase Save Error:', error.message);
-      }
-    } catch (err) {
-      console.error('Network Error saving to Supabase:', err);
-    }
-
-    // Reset Cart and Order State
-    setCart([]);
-    setDiscountAmount(0);
-    setServiceFee(0);
-    setDeliveryFee(0);
-    setCashReceived('');
-    setGcashRefNumber('');
-    setCustomer({ name: '', phone: '', address: '', notes: '' });
-    setShowCustomerFields(false);
+  const newTransaction: Transaction = {
+    id: transactionId,
+    timestamp: currentTimestamp,
+    items: [...cart],
+    subtotal,
+    discount: discountAmount,
+    serviceFee,
+    deliveryFee,
+    netSales,
+    paymentMethod,
+    cashReceived: paymentMethod === 'cash' ? parsedCash : undefined,
+    changeDue: paymentMethod === 'cash' ? changeDue : undefined,
+    gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : undefined,
+    customer: customer.name ? { ...customer } : undefined,
   };
+
+  // 1. Update local UI state immediately
+  const updatedProducts = products.map((prod) => {
+    const cartItem = cart.find((c) => c.id === prod.id);
+    if (cartItem) {
+      return { ...prod, stock: Math.max(0, prod.stock - cartItem.quantity) };
+    }
+    return prod;
+  });
+
+  setProducts(updatedProducts);
+  setTransactions((prev) => [newTransaction, ...prev]);
+  setReceiptData(newTransaction);
+
+  // 2. Format payload to match exact Supabase ALL-LOWERCASE column names
+  const supabasePayload = {
+    id: transactionId,
+    timestamp: currentTimestamp,
+    items: cart, // Saved as jsonb
+    subtotal: subtotal,
+    discount: discountAmount,
+    servicefee: serviceFee,
+    deliveryfee: deliveryFee,
+    netsales: netSales,
+    paymentmethod: paymentMethod,
+    cashreceived: paymentMethod === 'cash' ? parsedCash : null,
+    changedue: paymentMethod === 'cash' ? changeDue : null,
+    gcashrefnumber: paymentMethod === 'gcash' ? gcashRefNumber : null,
+    customer: customer.name ? customer : null, // Saved as jsonb
+  };
+
+  // 3. Persist transaction and sync remaining stock to Supabase
+  try {
+    const { error } = await supabase
+      .from('transactions')
+      .insert([supabasePayload]);
+
+    if (error) {
+      console.error('Supabase Transaction Save Error:', error.message);
+      alert(`Saved locally, but failed to sync transaction to Supabase: ${error.message}`);
+    } else {
+      // Sync deducted stock for each purchased item back to Supabase
+      for (const item of cart) {
+        const product = products.find((p) => p.id === item.id);
+        if (product) {
+          const newStock = Math.max(0, product.stock - item.quantity);
+          await supabase
+            .from('products')
+            .update({ stock: newStock })
+            .eq('id', item.id);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('Network Error saving to Supabase:', err);
+  }
+
+  // Reset Cart and Order State
+  setCart([]);
+  setDiscountAmount(0);
+  setServiceFee(0);
+  setDeliveryFee(0);
+  setCashReceived('');
+  setGcashRefNumber('');
+  setCustomer({ name: '', phone: '', address: '', notes: '' });
+  setShowCustomerFields(false);
+};
  
 
   // Fee / Discount Modal
