@@ -1,22 +1,23 @@
 {
-  "name": "PEDDLR POS Terminal",
-  "short_name": "PEDDLR POS",
-  "description": "Responsive Retail & Inventory Management System",
+  "name": "IÑAKI SARI-SARI STORE POS",
+  "short_name": "IÑAKI POS",
+  "description": "POS, Inventory & Sales Tracking",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#020617",
-  "theme_color": "#c026d3",
-  "orientation": "any",
+  "theme_color": "#020617",
   "icons": [
     {
       "src": "/Inaki.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/Inaki.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
