@@ -9,6 +9,7 @@ import {
   Package,
   BarChart3,
   BookOpen,
+  Bluetooth,
   Sliders,
   Search,
   Plus,
@@ -37,7 +38,8 @@ import {
   Tag,
   Sun,
   Moon
-} from 'lucide-react';
+} fromimport { Bluetooth } from 'lucide-react';
+ 'lucide-react';
 
 // --- Types & Interfaces ---
 export type ScanMethod = 'hardware' | 'camera' | 'manual';
