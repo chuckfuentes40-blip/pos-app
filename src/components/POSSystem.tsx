@@ -77,6 +77,18 @@ export interface ReceiptData {
     address?: string;
     notes?: string;
   };
+  
+  // Database lowercase aliases & alternative property names
+  netsales?: number;
+  paymentmethod?: string;
+  cashreceived?: number;
+  changedue?: number;
+  cashTendered?: number;
+  change?: number;
+  gcashrefnumber?: string;
+
+  // Catch-all index signature for dynamic property checks
+  [key: string]: any;
 }
 
 const buildEscPosReceiptBuffer = (receipt: any, triggerCashbox: boolean = true): Uint8Array => {
@@ -86,8 +98,12 @@ const buildEscPosReceiptBuffer = (receipt: any, triggerCashbox: boolean = true):
   const addBytes = (bytes: number[]) => chunks.push(new Uint8Array(bytes));
   const addText = (text: string) => chunks.push(encoder.encode(text));
 
-  const cashTendered = receipt.cashTendered ?? receipt.cashReceived ?? 0;
-  const change = receipt.change ?? receipt.changeDue ?? 0;
+  // Extract properties safely across camelCase and lowercase DB fields
+  const paymentMethod = String(receipt.paymentMethod || receipt.paymentmethod || '').toLowerCase();
+  const netSales = Number(receipt.netSales ?? receipt.netsales ?? 0);
+  const cashReceived = Number(receipt.cashReceived ?? receipt.cashreceived ?? receipt.cashTendered ?? 0);
+  const changeDue = Number(receipt.changeDue ?? receipt.changedue ?? receipt.change ?? 0);
+  const gcashRef = receipt.gcashRefNumber || receipt.gcashrefnumber;
 
   // 1. Reset / Initialize Printer (ESC @)
   addBytes([0x1b, 0x40]);
@@ -103,7 +119,7 @@ const buildEscPosReceiptBuffer = (receipt: any, triggerCashbox: boolean = true):
 
   // 3. Item List (Left Aligned)
   addBytes([0x1b, 0x61, 0x00]); // Left
-  receipt.items.forEach((item: any) => {
+  receipt.items?.forEach((item: any) => {
     addText(`${item.name}\n`);
     const line = `  ${item.quantity} x P${item.price.toFixed(2)}`.padEnd(22) + `P${(item.price * item.quantity).toFixed(2)}\n`;
     addText(line);
@@ -112,17 +128,17 @@ const buildEscPosReceiptBuffer = (receipt: any, triggerCashbox: boolean = true):
 
   // 4. Totals & Payment Info
   addBytes([0x1b, 0x45, 0x01]);
-  addText(`NET TOTAL: P${receipt.netSales.toFixed(2)}\n`);
+  addText(`NET TOTAL: P${netSales.toFixed(2)}\n`);
   addBytes([0x1b, 0x45, 0x00]);
-  addText(`Payment Method: ${receipt.paymentMethod.toUpperCase()}\n`);
+  addText(`Payment Method: ${paymentMethod.toUpperCase()}\n`);
 
-  if (receipt.paymentMethod === 'cash') {
-    addText(`Cash Tendered: P${cashTendered.toFixed(2)}\n`);
-    addText(`Change Due: P${change.toFixed(2)}\n`);
+  if (paymentMethod === 'cash' || cashReceived > 0) {
+    addText(`Cash Tendered: P${cashReceived.toFixed(2)}\n`);
+    addText(`Change Due: P${changeDue.toFixed(2)}\n`);
   }
 
-  if (receipt.gcashRefNumber) {
-    addText(`GCash Ref: ${receipt.gcashRefNumber}\n`);
+  if (gcashRef) {
+    addText(`GCash Ref: ${gcashRef}\n`);
   }
 
   // 5. Footer
@@ -788,6 +804,15 @@ export default function POSSystem() {
       (p.barcode && p.barcode.includes(searchQuery))
   );
 
+  const parseReceipt = (receipt: any) => ({
+  ...receipt,
+  netSales: Number(receipt.netSales ?? receipt.netsales ?? 0),
+  paymentMethod: String(receipt.paymentMethod || receipt.paymentmethod || '').toLowerCase(),
+  cashReceived: Number(receipt.cashReceived ?? receipt.cashreceived ?? receipt.cashTendered ?? 0),
+  changeDue: Number(receipt.changeDue ?? receipt.changedue ?? receipt.change ?? 0),
+  gcashRefNumber: receipt.gcashRefNumber || receipt.gcashrefnumber || '',
+});
+
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} flex flex-col font-sans`}>
       {/* Top Header Navigation */}
@@ -1349,41 +1374,52 @@ export default function POSSystem() {
               </div>
 
               {/* --- TOTALS & CASH DETAILS --- */}
-              <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
-                <div className="flex justify-between font-bold text-xs pt-0.5">
-                  <span>TOTAL:</span>
-                  <span>P{receiptData.netSales.toFixed(2)}</span>
-                </div>
-                
-                <div className="flex justify-between text-gray-800 uppercase pt-0.5 text-[9px]">
-                  <span>PAYMENT:</span>
-                  <span className="font-bold">{receiptData.paymentMethod}</span>
-                </div>
+              {(() => {
+                const rec = receiptData as any;
+                const paymentMethod = String(rec.paymentMethod || rec.paymentmethod || '').toLowerCase();
+                const netSales = Number(rec.netSales ?? rec.netsales ?? 0);
+                const cashReceived = Number(rec.cashReceived ?? rec.cashreceived ?? rec.cashTendered ?? 0);
+                const changeDue = Number(rec.changeDue ?? rec.changedue ?? rec.change ?? 0);
+                const gcashRef = rec.gcashRefNumber || rec.gcashrefnumber;
 
-                {receiptData.paymentMethod === 'cash' && (
-                  <>
-                    <div className="flex justify-between text-gray-800 text-[9px]">
-                      <span>CASH TENDERED:</span>
-                      <span className="font-bold">
-                        P{(receiptData.cashTendered ?? receiptData.cashReceived ?? 0).toFixed(2)}
-                      </span>
+                return (
+                  <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
+                    <div className="flex justify-between font-bold text-xs pt-0.5">
+                      <span>TOTAL:</span>
+                      <span>P{netSales.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-gray-800 text-[9px]">
-                      <span>CHANGE:</span>
-                      <span className="font-bold">
-                        P{(receiptData.change ?? receiptData.changeDue ?? 0).toFixed(2)}
-                      </span>
+                    
+                    <div className="flex justify-between text-gray-800 uppercase pt-0.5 text-[9px]">
+                      <span>PAYMENT:</span>
+                      <span className="font-bold">{paymentMethod}</span>
                     </div>
-                  </>
-                )}
 
-                {receiptData.gcashRefNumber && (
-                  <div className="flex justify-between text-gray-800 text-[9px]">
-                    <span>GCASH REF:</span>
-                    <span className="font-bold">{receiptData.gcashRefNumber}</span>
+                    {(paymentMethod === 'cash' || cashReceived > 0) && (
+                      <>
+                        <div className="flex justify-between text-gray-800 text-[9px]">
+                          <span>CASH TENDERED:</span>
+                          <span className="font-bold">
+                            P{cashReceived.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-gray-800 text-[9px]">
+                          <span>CHANGE:</span>
+                          <span className="font-bold">
+                            P{changeDue.toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+
+                    {gcashRef && (
+                      <div className="flex justify-between text-gray-800 text-[9px]">
+                        <span>GCASH REF:</span>
+                        <span className="font-bold">{gcashRef}</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               <div className="pt-2 text-center text-[9px] space-y-0.5">
                 <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
