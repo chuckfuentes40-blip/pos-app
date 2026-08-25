@@ -1453,7 +1453,7 @@ const handleDeleteProduct = (id: string) => {
                     <h3 className="font-semibold text-slate-100 mb-1 flex items-center gap-2 text-sm">
                       <Download size={16} className="text-fuchsia-400" /> Web App Installation
                     </h3>
-                    <p className="text-xs text-slate-400 mb-3">Install PEDDLR POS as a desktop or mobile application.</p>
+                    <p className="text-xs text-slate-400 mb-3">Install IÑaki POS as a desktop or mobile application.</p>
                     <button
                       onClick={handleInstallApp}
                       className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2"
