@@ -140,8 +140,10 @@ const INITIAL_LEDGER: LedgerEntry[] = [
   { id: 'LED-3', customerName: 'Tito Boy', phone: '09223334444', amount: 300, dueDate: '2026-08-20', status: 'paid', description: 'Cigarettes & Matches' }
 ];
 
+
 export default function POSSystem() {
   // Navigation & UI state
+  type TabType = 'pos' | 'inventory' | 'analytics' | 'ledger' | 'settings';
   const [activeTab, setActiveTab] = useState<TabType>('pos');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
@@ -868,7 +870,7 @@ const handleDeleteProduct = (id: string) => {
         ? 'bg-slate-950 text-slate-100'
         : 'bg-slate-100 text-slate-900'
     }`}
-  >
+    >
     {/* Mobile & Tablet Drawer Backdrop */}
     {isSidebarOpen && (
       <div
@@ -916,6 +918,7 @@ const handleDeleteProduct = (id: string) => {
             <X size={18} />
           </button>
         </div>
+      
 
           {/* Navigation Items */}
           <nav className="p-3 space-y-1.5">
@@ -994,504 +997,526 @@ const handleDeleteProduct = (id: string) => {
             </span>
           </div>
         </header>
-
-        {/* Tab Body Contents */}
-        <main className="flex-1 overflow-hidden flex min-w-0">
-          
-          {/* 1. POS Terminal Tab */}
-          {activeTab === 'pos' && (
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-w-0">
-              
-              {/* Product Catalog Column */}
-              <div className="flex-1 flex flex-col border-r border-slate-800 overflow-hidden min-w-0">
-                
-                {/* Search & Scan Controls */}
-                <div className="p-3 sm:p-4 bg-slate-900/60 border-b border-slate-800 space-y-3">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
-                      <input
-                        type="text"
-                        placeholder="Search product name or barcode..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-                      />
-                      {searchQuery && (
-                        <button
-                          onClick={() => setSearchQuery('')}
-                          className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300"
-                        >
-                          <X size={14} />
-                        </button>
-                      )}
-                    </div>
-
-                    <button
-                    onClick={() => setIsPosCameraOpen(true)}
-                    className="px-3.5 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0"
-                  >
-                    <Camera size={16} />
-                    <span className="hidden sm:inline landscape:inline">Camera Scan</span>
-                  </button>
-                  </div>
-                </div>
-
-                {/* Product Grid */}
-                <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredProducts.map((product) => {
-                    const isLowStock = product.stock <= product.lowStockThreshold;
-                    const isOutOfStock = product.stock <= 0;
-
-                    return (
-                      <button
-                        key={product.id}
-                        onClick={() => addToCart(product)}
-                        disabled={isOutOfStock}
-                        className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between relative group ${
-                          isOutOfStock
-                            ? 'bg-slate-900/40 border-slate-800/60 opacity-50 cursor-not-allowed'
-                            : 'bg-slate-900 border-slate-800/80 hover:border-fuchsia-500/50 hover:bg-slate-850'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-1 mb-1.5">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-400 bg-fuchsia-600/10 px-2 py-0.5 rounded-md">
-                              {product.category || 'Item'}
-                            </span>
-                            {isLowStock && !isOutOfStock && (
-                              <span className="text-[9px] bg-amber-500/20 text-amber-400 font-bold px-1.5 py-0.5 rounded">
-                                Low
-                              </span>
-                            )}
-                          </div>
-
-                          <h3 className="font-bold text-xs sm:text-sm text-slate-100 line-clamp-2 leading-snug">
-                            {product.name}
-                          </h3>
-                        </div>
-
-                        <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between">
-                          <span className="font-mono font-bold text-sm text-white">
-                            ₱{product.price.toFixed(2)}
-                          </span>
-                          <span className={`text-[10px] font-mono ${isOutOfStock ? 'text-rose-400 font-bold' : 'text-slate-400'}`}>
-                            {isOutOfStock ? 'OUT OF STOCK' : `${product.stock} ${product.unit}`}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Cart Summary Column */}
-              <div className="w-full lg:w-80 xl:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col shrink-0">
-                <div className="p-3 sm:p-4 border-b border-slate-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShoppingCart size={18} className="text-fuchsia-400" />
-                    <h3 className="font-bold text-sm text-slate-100">Current Order</h3>
-                  </div>
-                  {cart.length > 0 && (
-                    <button
-                      onClick={() => setCart([])}
-                      className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1"
-                    >
-                      <Trash2 size={12} /> Clear
-                    </button>
-                  )}
-                </div>
-
-                {/* Cart Items List */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {cart.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
-                      <ShoppingCart size={36} className="text-slate-700 stroke-1" />
-                      <p className="text-xs font-semibold">Cart is empty</p>
-                      <p className="text-[11px] text-slate-600">Select items from catalog to build order</p>
-                    </div>
-                  ) : (
-                    cart.map((item) => (
-                      <div
-                        key={item.id}
-                        className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <h4 className="font-bold text-xs text-slate-200 truncate">{item.name}</h4>
-                          <p className="text-[10px] font-mono text-slate-400">₱{item.price.toFixed(2)} / {item.unit}</p>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => updateQuantity(item.id, -1)}
-                            className="h-6 w-6 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs"
-                          >
-                            <Minus size={12} />
-                          </button>
-                          <span className="font-mono text-xs font-bold px-1.5 min-w-[20px] text-center text-white">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQuantity(item.id, 1)}
-                            className="h-6 w-6 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs"
-                          >
-                            <Plus size={12} />
-                          </button>
-                        </div>
-
-                        <div className="text-right min-w-[60px]">
-                          <p className="font-mono font-bold text-xs text-white">
-                            ₱{(item.price * item.quantity).toFixed(2)}
-                          </p>
-                          <button
-                            onClick={() => removeFromCart(item.id)}
-                            className="text-[10px] text-slate-500 hover:text-rose-400"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-            
-
-                    {/* Open Payment Modal Button */}
-                    <button
-                      type="button"
-                      onClick={() => setIsPaymentModalOpen(true)}
-                      disabled={cart.length === 0}
-                      className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-lg ${
-                        cart.length > 0
-                          ? 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-fuchsia-600/30'
-                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      }`}
-                    >
-                      COMPLETE PAYMENT
-                    </button>
-                  </div>
-
-                      {/* --- RECEIPT MODAL --- */}
-                      {receiptData && (
-                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full flex flex-col items-center animate-in fade-in zoom-in-95">
-                            
-                            {/* White Thermal Receipt Container */}
-                            <div className="bg-white text-slate-900 font-mono text-[11px] p-5 rounded-2xl w-full shadow-inner space-y-3">
-                              {/* Receipt Header */}
-                              <div className="text-center space-y-1">
-                                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold mx-auto mb-1">
-                                  🏪
-                                </div>
-                                <h4 className="font-black text-sm uppercase tracking-tight">IÑAKI STORE</h4>
-                                <p className="text-[10px] text-slate-500">
-                                  {new Date(receiptData.timestamp).toLocaleString()}
-                                </p>
-                                <p className="text-[10px] text-slate-500">Receipt #: {receiptData.id}</p>
-                              </div>
-
-                              <div className="border-b border-dashed border-slate-300 my-2" />
-
-                              {/* Items List */}
-                              <div className="space-y-1.5">
-                                {receiptData.items?.map((item: any, idx: number) => (
-                                  <div key={idx} className="flex justify-between items-start">
-                                    <div>
-                                      <p className="font-bold">{item.name}</p>
-                                      <p className="text-[10px] text-slate-500">
-                                        {item.quantity} x ₱{item.price.toFixed(2)}
-                                      </p>
-                                    </div>
-                                    <span className="font-bold">₱{(item.quantity * item.price).toFixed(2)}</span>
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div className="border-b border-dashed border-slate-300 my-2" />
-
-                              {/* Totals Summary */}
-                              <div className="space-y-1 text-xs">
-                                <div className="flex justify-between font-black text-sm">
-                                  <span>TOTAL :</span>
-                                  <span>₱{receiptData.netSales.toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between text-[10px] text-slate-600">
-                                  <span>PAYMENT:</span>
-                                  <span className="uppercase">{receiptData.paymentMethod}</span>
-                                </div>
-                                <div className="flex justify-between text-[10px] text-slate-600">
-                                  <span>RECEIVED:</span>
-                                  <span>₱{(receiptData.cashTendered || receiptData.netSales).toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between text-[10px] text-slate-600">
-                                  <span>CHANGE:</span>
-                                  <span>₱{(receiptData.change || 0).toFixed(2)}</span>
-                                </div>
-                              </div>
-
-                              <div className="border-b border-dashed border-slate-300 my-2" />
-
-                              {/* Footer Note */}
-                              <div className="text-center text-[10px] text-slate-500 font-sans pt-1">
-                                <p className="font-bold">MARAMING SALAMAT PO!</p>
-                                <p>Please Come Again</p>
-                              </div>
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex items-center justify-center gap-2 mt-5 w-full">
-                              <button
-                                type="button"
-                                onClick={() => alert('Direct Bluetooth Printing...')}
-                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-blue-600/30"
-                              >
-                                <span>📶</span> Direct BT Print
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => window.print()}
-                                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-fuchsia-600/30"
-                              >
-                                <span>🖨️</span> Print
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setReceiptData(null);
-                                  setIsPaymentModalOpen(false);
-                                }}
-                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl transition"
-                              >
-                                Close
-                              </button>
-                            </div>
-
-                          </div>
-                        </div>
-                      )}
-                  </div>
-                </div>
-                </div>
-                )}
-
-          {/* 2. Inventory Tab */}
-          {activeTab === 'inventory' && (
-            <div className="flex-1 p-4 sm:p-6 overflow-y-auto min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h2 className="text-lg sm:text-xl font-bold">Inventory Management</h2>
-                  <p className="text-xs text-slate-400">Track stock levels, costs, and product barcodes</p>
-                </div>
+{/* Tab Body Contents */}
+<main className="flex-1 overflow-hidden flex min-w-0">
+  
+  {/* 1. POS Terminal Tab */}
+  {activeTab === 'pos' && (
+    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-w-0">
+      
+      {/* Product Catalog Column */}
+      <div className="flex-1 flex flex-col border-r border-slate-800 overflow-hidden min-w-0">
+        
+        {/* Search & Scan Controls */}
+        <div className="p-3 sm:p-4 bg-slate-900/60 border-b border-slate-800 space-y-3">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
+              <input
+                type="text"
+                placeholder="Search product name or barcode..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
+              />
+              {searchQuery && (
                 <button
-                  onClick={() => handleOpenProductModal()}
-                  className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 self-start sm:self-auto shadow-md shadow-fuchsia-600/30"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300"
                 >
-                  <Plus size={16} /> Add Product
+                  <X size={14} />
                 </button>
-              </div>
+              )}
+            </div>
 
-              {/* Table Container */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-950/60 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                        <th className="p-3.5">Product</th>
-                        <th className="p-3.5">Barcode</th>
-                        <th className="p-3.5">Price</th>
-                        <th className="p-3.5">Cost</th>
-                        <th className="p-3.5">Stock</th>
-                        <th className="p-3.5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800 text-xs">
-                      {products.map((p) => {
-                        const isLow = p.stock <= p.lowStockThreshold;
-                        return (
-                          <tr key={p.id} className="hover:bg-slate-850/50 transition">
-                            <td className="p-3.5 font-bold text-slate-200">
-                              {p.name}
-                              <span className="block text-[10px] font-normal text-slate-500">{p.category || 'General'}</span>
-                            </td>
-                            <td className="p-3.5 font-mono text-slate-400">{p.barcode}</td>
-                            <td className="p-3.5 font-mono text-emerald-400 font-bold">₱{p.price.toFixed(2)}</td>
-                            <td className="p-3.5 font-mono text-slate-400">₱{p.cost.toFixed(2)}</td>
-                            <td className="p-3.5 font-mono">
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  isLow ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-300'
-                                }`}
-                              >
-                                {p.stock} {p.unit}
-                              </span>
-                            </td>
-                            <td className="p-3.5 text-right space-x-2">
-                              <button
-                                onClick={() => handleOpenProductModal(p)}
-                                className="p-1.5 text-slate-400 hover:text-fuchsia-400 hover:bg-slate-800 rounded-lg transition"
-                              >
-                                <Edit size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteProduct(p.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+            <button
+              onClick={() => setIsPosCameraOpen(true)}
+              className="px-3.5 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0"
+            >
+              <Camera size={16} />
+              <span className="hidden sm:inline landscape:inline">Camera Scan</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Product Grid */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filteredProducts.map((product) => {
+            const isLowStock = product.stock <= product.lowStockThreshold;
+            const isOutOfStock = product.stock <= 0;
+
+            return (
+              <button
+                key={product.id}
+                onClick={() => addToCart(product)}
+                disabled={isOutOfStock}
+                className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between relative group ${
+                  isOutOfStock
+                    ? 'bg-slate-900/40 border-slate-800/60 opacity-50 cursor-not-allowed'
+                    : 'bg-slate-900 border-slate-800/80 hover:border-fuchsia-500/50 hover:bg-slate-850'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-1 mb-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-400 bg-fuchsia-600/10 px-2 py-0.5 rounded-md">
+                      {product.category || 'Item'}
+                    </span>
+                    {isLowStock && !isOutOfStock && (
+                      <span className="text-[9px] bg-amber-500/20 text-amber-400 font-bold px-1.5 py-0.5 rounded">
+                        Low
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 className="font-bold text-xs sm:text-sm text-slate-100 line-clamp-2 leading-snug">
+                    {product.name}
+                  </h3>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between">
+                  <span className="font-mono font-bold text-sm text-white">
+                    ₱{product.price.toFixed(2)}
+                  </span>
+                  <span className={`text-[10px] font-mono ${isOutOfStock ? 'text-rose-400 font-bold' : 'text-slate-400'}`}>
+                    {isOutOfStock ? 'OUT OF STOCK' : `${product.stock} ${product.unit}`}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Cart Summary Column */}
+      <div className="w-full lg:w-80 xl:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col shrink-0">
+        <div className="p-3 sm:p-4 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShoppingCart size={18} className="text-fuchsia-400" />
+            <h3 className="font-bold text-sm text-slate-100">Current Order</h3>
+          </div>
+          {cart.length > 0 && (
+            <button
+              onClick={() => setCart([])}
+              className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1"
+            >
+              <Trash2 size={12} /> Clear
+            </button>
+          )}
+        </div>
+
+        {/* Cart Items List */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {cart.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
+              <ShoppingCart size={36} className="text-slate-700 stroke-1" />
+              <p className="text-xs font-semibold">Cart is empty</p>
+              <p className="text-[11px] text-slate-600">Select items from catalog to build order</p>
+            </div>
+          ) : (
+            cart.map((item) => (
+              <div
+                key={item.id}
+                className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-xs text-slate-200 truncate">{item.name}</h4>
+                  <p className="text-[10px] font-mono text-slate-400">₱{item.price.toFixed(2)} / {item.unit}</p>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => updateQuantity(item.id, -1)}
+                    className="h-6 w-6 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs"
+                  >
+                    <Minus size={12} />
+                  </button>
+                  <span className="font-mono text-xs font-bold px-1.5 min-w-[20px] text-center text-white">
+                    {item.quantity}
+                  </span>
+                  <button
+                    onClick={() => updateQuantity(item.id, 1)}
+                    className="h-6 w-6 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs"
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
+
+                <div className="text-right min-w-[60px]">
+                  <p className="font-mono font-bold text-xs text-white">
+                    ₱{(item.price * item.quantity).toFixed(2)}
+                  </p>
+                  <button
+                    onClick={() => removeFromCart(item.id)}
+                    className="text-[10px] text-slate-500 hover:text-rose-400"
+                  >
+                    Remove
+                  </button>
                 </div>
               </div>
-            </div>
+            ))
           )}
+        </div>
 
-         {/* 3. Analytics Tab */}
-        {activeTab === 'analytics' && (
-          <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
-            {/* Header & Filter Controls */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold">Business Analytics</h2>
-                <p className="text-xs text-slate-400">Sales performance and financial metrics</p>
+        {/* Checkout Section */}
+        <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3">
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center text-xs font-semibold text-slate-400">
+              <span>Subtotal</span>
+              <span className="font-mono text-slate-200">₱{subtotal.toFixed(2)}</span>
+            </div>
+
+            {effectiveDiscount > 0 && (
+              <div className="flex justify-between items-center text-xs text-fuchsia-400">
+                <span>Discount</span>
+                <span className="font-mono">-₱{effectiveDiscount.toFixed(2)}</span>
               </div>
+            )}
 
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Time Range Selector */}
-                <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 flex items-center gap-1 text-xs font-semibold">
-                  {(['daily', 'weekly', 'monthly', 'all'] as const).map((range) => (
-                    <button
-                      key={range}
-                      onClick={() => setTimeFilter(range)}
-                      className={`px-3 py-1.5 rounded-lg capitalize transition ${
-                        timeFilter === range
-                          ? 'bg-blue-600 text-white font-bold shadow'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                      }`}
-                    >
-                      {range === 'all' ? 'All Time' : range}
-                    </button>
+            {effectiveServiceFee > 0 && (
+              <div className="flex justify-between items-center text-xs text-slate-400">
+                <span>Service Fee</span>
+                <span className="font-mono">+₱{effectiveServiceFee.toFixed(2)}</span>
+              </div>
+            )}
+
+            {deliveryFee > 0 && (
+              <div className="flex justify-between items-center text-xs text-slate-400">
+                <span>Delivery Fee</span>
+                <span className="font-mono">+₱{deliveryFee.toFixed(2)}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center text-sm font-black pt-2 border-t border-slate-800/80">
+              <span className="text-white">NET TOTAL</span>
+              <span className="font-mono text-fuchsia-400 text-lg">₱{netTotal.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsPaymentModalOpen(true)}
+            disabled={cart.length === 0}
+            className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-lg ${
+              cart.length > 0
+                ? 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-fuchsia-600/30'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            COMPLETE PAYMENT
+          </button>
+        </div>
+
+        {/* --- RECEIPT MODAL --- */}
+        {receiptData && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full flex flex-col items-center animate-in fade-in zoom-in-95">
+              <div className="bg-white text-slate-900 font-mono text-[11px] p-5 rounded-2xl w-full shadow-inner space-y-3">
+                <div className="text-center space-y-1">
+                  <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold mx-auto mb-1">
+                    🏪
+                  </div>
+                  <h4 className="font-black text-sm uppercase tracking-tight">IÑAKI STORE</h4>
+                  <p className="text-[10px] text-slate-500">
+                    {new Date(receiptData.timestamp).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Receipt #: {receiptData.id}</p>
+                </div>
+
+                <div className="border-b border-dashed border-slate-300 my-2" />
+
+                <div className="space-y-1.5">
+                  {receiptData.items?.map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-start">
+                      <div>
+                        <p className="font-bold">{item.name}</p>
+                        <p className="text-[10px] text-slate-500">
+                          {item.quantity} x ₱{item.price.toFixed(2)}
+                        </p>
+                      </div>
+                      <span className="font-bold">₱{(item.quantity * item.price).toFixed(2)}</span>
+                    </div>
                   ))}
                 </div>
 
-                <button
-                  onClick={() => setIsExportModalOpen(true)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700"
-                >
-                  <Mail size={14} /> Export Report
-                </button>
-              </div>
-            </div>
+                <div className="border-b border-dashed border-slate-300 my-2" />
 
-           {/* KPI Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-              {/* Total Revenue */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                <p className="text-xs text-slate-400 font-semibold mb-1">Total Sales Revenue</p>
-                <p className="text-2xl font-black font-mono text-emerald-400">
-                  ₱{(totalSalesVal || 0).toFixed(2)}
-                </p>
-              </div>
-
-              {/* Total GCash Sales */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                <p className="text-xs text-slate-400 font-semibold mb-1">Total GCash Sales</p>
-                <p className="text-2xl font-black font-mono text-blue-400">
-                  ₱{(totalGCashSalesVal || 0).toFixed(2)}
-                </p>
-                <p className="text-[10px] text-slate-500 font-medium mt-1">
-                  {gcashTxCount} {gcashTxCount === 1 ? 'transaction' : 'transactions'}
-                </p>
-              </div>
-
-              {/* Payment Methods Breakdown */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                <p className="text-xs text-slate-400 font-semibold mb-1">Transaction Breakdown</p>
-                <div className="space-y-1 mt-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400 font-medium">💵 Cash:</span>
-                    <span className="font-mono font-bold text-white">{cashTxCount}</span>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between font-black text-sm">
+                    <span>TOTAL :</span>
+                    <span>₱{receiptData.netSales.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-blue-400 font-medium">📱 GCash:</span>
-                    <span className="font-mono font-bold text-blue-400">{gcashTxCount}</span>
+                  <div className="flex justify-between text-[10px] text-slate-600">
+                    <span>PAYMENT:</span>
+                    <span className="uppercase">{receiptData.paymentMethod}</span>
                   </div>
+                  <div className="flex justify-between text-[10px] text-slate-600">
+                    <span>RECEIVED:</span>
+                    <span>₱{(receiptData.cashTendered || receiptData.netSales).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-600">
+                    <span>CHANGE:</span>
+                    <span>₱{(receiptData.change || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="border-b border-dashed border-slate-300 my-2" />
+
+                <div className="text-center text-[10px] text-slate-500 font-sans pt-1">
+                  <p className="font-bold">MARAMING SALAMAT PO!</p>
+                  <p>Please Come Again</p>
                 </div>
               </div>
 
-              {/* Gross Profit */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                <p className="text-xs text-slate-400 font-semibold mb-1">Gross Profit</p>
-                <p className="text-2xl font-black font-mono text-fuchsia-400">
-                  ₱{(grossProfit || 0).toFixed(2)}
-                </p>
-              </div>
-
-              {/* Total Orders */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                <p className="text-xs text-slate-400 font-semibold mb-1">Total Orders</p>
-                <p className="text-2xl font-black font-mono text-white">
-                  {filteredTransactions.length}
-                </p>
-              </div>
-
-              {/* Inventory Capital Value */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                <p className="text-xs text-slate-400 font-semibold mb-1">Inventory Capital Value</p>
-                <p className="text-2xl font-black font-mono text-amber-400">
-                  ₱{(totalInventoryCapital || 0).toFixed(2)}
-                </p>
-              </div>
-            </div>
-
-            {/* Transaction Logs */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
-              <h3 className="text-sm font-bold text-slate-100 mb-4 capitalize">
-                Recent Sales Activity ({timeFilter})
-              </h3>
-              <div className="space-y-2">
-                {filteredTransactions.map((trx) => {
-                  const netSalesVal = Number(trx.netSales ?? (trx as any).netsales ?? 0);
-                  const itemsCount = Array.isArray(trx.items) ? trx.items.length : 0;
-                  const payment = trx.paymentMethod || (trx as any).paymentmethod || 'CASH';
-
-                  return (
-                    <div
-                      key={trx.id}
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <span className="font-mono font-bold text-fuchsia-400">{trx.id}</span>
-                        <p className="text-[10px] text-slate-500">
-                          {trx.timestamp
-                            ? new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                            : 'N/A'}{' '}
-                          • {itemsCount} items
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono font-bold text-white">
-                          ₱{netSalesVal.toFixed(2)}
-                        </span>
-                        <span
-                          className={`block text-[10px] uppercase font-bold ${
-                            payment.toLowerCase() === 'gcash' ? 'text-blue-400' : 'text-slate-400'
-                          }`}
-                        >
-                          {payment}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center justify-center gap-2 mt-5 w-full">
+                <button
+                  type="button"
+                  onClick={() => alert('Direct Bluetooth Printing...')}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-blue-600/30"
+                >
+                  <span>📶</span> Direct BT Print
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-fuchsia-600/30"
+                >
+                  <span>🖨️</span> Print
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReceiptData(null);
+                    setIsPaymentModalOpen(false);
+                  }}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl transition"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>
         )}
+      </div> {/* CLOSED Cart Summary Column */}
+    </div> 
+  )} {/* CLOSED activeTab === 'pos' */}
+
+  {/* 2. Inventory Tab */}
+  {activeTab === 'inventory' && (
+    <div className="flex-1 p-4 sm:p-6 overflow-y-auto min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-lg sm:text-xl font-bold">Inventory Management</h2>
+          <p className="text-xs text-slate-400">Track stock levels, costs, and product barcodes</p>
+        </div>
+        <button
+          onClick={() => handleOpenProductModal()}
+          className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 self-start sm:self-auto shadow-md shadow-fuchsia-600/30"
+        >
+          <Plus size={16} /> Add Product
+        </button>
+      </div>
+
+      {/* Table Container */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-950/60 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="p-3.5">Product</th>
+                <th className="p-3.5">Barcode</th>
+                <th className="p-3.5">Price</th>
+                <th className="p-3.5">Cost</th>
+                <th className="p-3.5">Stock</th>
+                <th className="p-3.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 text-xs">
+              {products.map((p) => {
+                const isLow = p.stock <= p.lowStockThreshold;
+                return (
+                  <tr key={p.id} className="hover:bg-slate-850/50 transition">
+                    <td className="p-3.5 font-bold text-slate-200">
+                      {p.name}
+                      <span className="block text-[10px] font-normal text-slate-500">{p.category || 'General'}</span>
+                    </td>
+                    <td className="p-3.5 font-mono text-slate-400">{p.barcode}</td>
+                    <td className="p-3.5 font-mono text-emerald-400 font-bold">₱{p.price.toFixed(2)}</td>
+                    <td className="p-3.5 font-mono text-slate-400">₱{p.cost.toFixed(2)}</td>
+                    <td className="p-3.5 font-mono">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isLow ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-300'
+                        }`}
+                      >
+                        {p.stock} {p.unit}
+                      </span>
+                    </td>
+                    <td className="p-3.5 text-right space-x-2">
+                      <button
+                        onClick={() => handleOpenProductModal(p)}
+                        className="p-1.5 text-slate-400 hover:text-fuchsia-400 hover:bg-slate-800 rounded-lg transition"
+                      >
+                        <Edit size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProduct(p.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )} {/* CLOSED activeTab === 'inventory' */}
+
+        {/* 3. Analytics Tab */}
+          {activeTab === 'analytics' && (
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
+              {/* Header & Filter Controls */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Business Analytics</h2>
+                  <p className="text-xs text-slate-400">Sales performance and financial metrics</p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Time Range Selector */}
+                  <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 flex items-center gap-1 text-xs font-semibold">
+                    {(['daily', 'weekly', 'monthly', 'all'] as const).map((range) => (
+                      <button
+                        key={range}
+                        onClick={() => setTimeFilter(range)}
+                        className={`px-3 py-1.5 rounded-lg capitalize transition ${
+                          timeFilter === range
+                            ? 'bg-blue-600 text-white font-bold shadow'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                        }`}
+                      >
+                        {range === 'all' ? 'All Time' : range}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setIsExportModalOpen(true)}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700"
+                  >
+                    <Mail size="{14}"/> Export Report
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                {/* Total Revenue */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Total Sales Revenue</p>
+                  <p className="text-2xl font-black font-mono text-emerald-400">
+                    ₱{(totalSalesVal || 0).toFixed(2)}
+                  </p>
+                </div>
+
+                {/* Total GCash Sales */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Total GCash Sales</p>
+                  <p className="text-2xl font-black font-mono text-blue-400">
+                    ₱{(totalGCashSalesVal || 0).toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-medium mt-1">
+                    {gcashTxCount} {gcashTxCount === 1 ? 'transaction' : 'transactions'}
+                  </p>
+                </div>
+
+                {/* Payment Methods Breakdown */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Transaction Breakdown</p>
+                  <div className="space-y-1 mt-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400 font-medium">💵 Cash:</span>
+                      <span className="font-mono font-bold text-white">{cashTxCount}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-blue-400 font-medium">📱 GCash:</span>
+                      <span className="font-mono font-bold text-blue-400">{gcashTxCount}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Gross Profit */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Gross Profit</p>
+                  <p className="text-2xl font-black font-mono text-fuchsia-400">
+                    ₱{(grossProfit || 0).toFixed(2)}
+                  </p>
+                </div>
+
+                {/* Total Orders */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Total Orders</p>
+                  <p className="text-2xl font-black font-mono text-white">
+                    {filteredTransactions.length}
+                  </p>
+                </div>
+
+                {/* Inventory Capital Value */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400 font-semibold mb-1">Inventory Capital Value</p>
+                  <p className="text-2xl font-black font-mono text-amber-400">
+                    ₱{(totalInventoryCapital || 0).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Transaction Logs */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+                <h3 className="text-sm font-bold text-slate-100 mb-4 capitalize">
+                  Recent Sales Activity ({timeFilter})
+                </h3>
+                <div className="space-y-2">
+                  {filteredTransactions.map((trx) => {
+                    const netSalesVal = Number(trx.netSales ?? (trx as any).netsales ?? 0);
+                    const itemsCount = Array.isArray(trx.items) ? trx.items.length : 0;
+                    const payment = trx.paymentMethod || (trx as any).paymentmethod || 'CASH';
+
+                    return (
+                      <div
+                        key={trx.id}
+                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <span className="font-mono font-bold text-fuchsia-400">{trx.id}</span>
+                          <p className="text-[10px] text-slate-500">
+                            {trx.timestamp
+                              ? new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : 'N/A'}{' '}
+                            • {itemsCount} items
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-white">
+                            ₱{netSalesVal.toFixed(2)}
+                          </span>
+                          <span
+                            className={`block text-[10px] uppercase font-bold ${
+                              payment.toLowerCase() === 'gcash' ? 'text-blue-400' : 'text-slate-400'
+                            }`}
+                          >
+                            {payment}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 4. Ledger Tab */}
           {activeTab === 'ledger' && (
@@ -1632,7 +1657,7 @@ const handleDeleteProduct = (id: string) => {
                 )}
               </div>
 
-                  {/* Display & Appearance Settings */}
+             {/* Display & Appearance Settings */}
               <div className="mt-6 rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
                 <div className="flex items-center gap-2 mb-1">
                   <Sun size={18} className="text-fuchsia-400" />
@@ -1661,7 +1686,7 @@ const handleDeleteProduct = (id: string) => {
                     {theme === 'dark' && <Check size={16} className="text-fuchsia-400" />}
                   </button>
 
-                  {/* Light Mode Card */}
+                 {/* Light Mode Card */}
                   <button
                     type="button"
                     onClick={() => handleThemeChange('light')}
@@ -1684,10 +1709,11 @@ const handleDeleteProduct = (id: string) => {
               </div>
             </div>
           )}
-         
         </main>
       </div>
-      {/* --- OVERLAY MODALS --- */}
+    </div>
+  );
+
 
       {/* Fee / Discount Setter Modal */}
       {activeFeeModal && (
@@ -2269,11 +2295,4 @@ const handleDeleteProduct = (id: string) => {
             </div>
 
           </div>
-        )}
-
-
-
-    </div>
-  );
-}
-
+        )}}
