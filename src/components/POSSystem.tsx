@@ -22,7 +22,9 @@ import {
   Printer,
   Wifi,
   CreditCard,
-  Edit
+  Edit,
+  Bluetooth,
+  Unlock
 } from 'lucide-react';
 
 // --- SUPABASE CLIENT INITIALIZATION ---
@@ -77,7 +79,72 @@ export interface ReceiptData {
   };
 }
 
-// --- CAMERA SCANNER MODAL COMPONENT ---
+// --- ESC/POS BUFFER BUILDER WITH CASHBOX TRIGGER ---
+const buildEscPosReceiptBuffer = (receipt: ReceiptData, triggerCashbox: boolean = true): Uint8Array => {
+  const encoder = new TextEncoder();
+  const chunks: Uint8Array[] = [];
+
+  const addBytes = (bytes: number[]) => chunks.push(new Uint8Array(bytes));
+  const addText = (text: string) => chunks.push(encoder.encode(text));
+
+  // 1. Reset / Initialize Printer (ESC @)
+  addBytes([0x1b, 0x40]);
+
+  // 2. Header (Centered, Bold)
+  addBytes([0x1b, 0x61, 0x01]); // Center
+  addBytes([0x1b, 0x45, 0x01]); // Bold ON
+  addText("INAKI STORE\n");
+  addBytes([0x1b, 0x45, 0x00]); // Bold OFF
+  addText(`${new Date(receipt.timestamp).toLocaleString('en-PH')}\n`);
+  addText(`Receipt #: ${receipt.id}\n`);
+  addText("--------------------------------\n");
+
+  // 3. Item List (Left Aligned)
+  addBytes([0x1b, 0x61, 0x00]); // Left
+  receipt.items.forEach((item) => {
+    addText(`${item.name}\n`);
+    const line = `  ${item.quantity} x P${item.price.toFixed(2)}`.padEnd(22) + `P${(item.price * item.quantity).toFixed(2)}\n`;
+    addText(line);
+  });
+  addText("--------------------------------\n");
+
+  // 4. Totals & Payment Info
+  addBytes([0x1b, 0x45, 0x01]);
+  addText(`NET TOTAL: P${receipt.netSales.toFixed(2)}\n`);
+  addBytes([0x1b, 0x45, 0x00]);
+  addText(`Payment Method: ${receipt.paymentMethod.toUpperCase()}\n`);
+  if (receipt.gcashRefNumber) {
+    addText(`GCash Ref: ${receipt.gcashRefNumber}\n`);
+  }
+  if (receipt.paymentMethod === 'cash' && receipt.cashReceived) {
+    addText(`Cash Tendered: P${receipt.cashReceived.toFixed(2)}\n`);
+    addText(`Change Due: P${(receipt.changeDue || 0).toFixed(2)}\n`);
+  }
+
+  // 5. Footer
+  addBytes([0x1b, 0x61, 0x01]); // Center
+  addText("\nMaraming Salamat Po!\nPlease Come Again\n\n\n");
+
+  // 6. Cash Drawer Kick Command (ESC p m t1 t2) -> Pin 2 Pulse
+  if (triggerCashbox) {
+    addBytes([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+  }
+
+  // 7. Paper Cut Command (GS V 0)
+  addBytes([0x1d, 0x56, 0x00]);
+
+  // Merge into single array
+  const totalBytes = chunks.reduce((acc, curr) => acc + curr.length, 0);
+  const result = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+};
+
+// --- ENHANCED HIGH-ACCURACY CAMERA SCANNER ---
 interface CameraScannerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -86,9 +153,12 @@ interface CameraScannerProps {
 
 export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, onScan }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
+  const isProcessingRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -102,52 +172,103 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
   const startCamera = async () => {
     setCameraError(null);
     try {
+      // Request high resolution and environment-facing camera
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+        },
       });
+
       streamRef.current = stream;
+
+      // Apply continuous auto-focus hardware constraint if supported by device
+      const track = stream.getVideoTracks()[0];
+      if (track && 'applyConstraints' in track) {
+        const capabilities = (track.getCapabilities?.() || {}) as any;
+        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] } as any).catch(() => {});
+        }
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        detectBarcode();
+        await videoRef.current.play();
+        startFrameDetection();
       }
     } catch (err: any) {
-      setCameraError('Camera access denied or unavailable.');
+      setCameraError('Camera access denied or high-res mode unavailable.');
     }
   };
 
   const stopCamera = () => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
   };
 
-  const detectBarcode = async () => {
-    if ('BarcodeDetector' in window) {
-      try {
-        const barcodeDetector = new (window as any).BarcodeDetector({
-          formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'upc_a', 'upc_e'],
-        });
+  const startFrameDetection = async () => {
+    if (!('BarcodeDetector' in window)) {
+      return;
+    }
 
-        const interval = setInterval(async () => {
-          if (!videoRef.current || !streamRef.current) {
-            clearInterval(interval);
+    try {
+      const barcodeDetector = new (window as any).BarcodeDetector({
+        formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'upc_a', 'upc_e', 'code_39'],
+      });
+
+      const processFrame = async () => {
+        if (!videoRef.current || !streamRef.current || isProcessingRef.current) {
+          animFrameRef.current = requestAnimationFrame(processFrame);
+          return;
+        }
+
+        isProcessingRef.current = true;
+
+        try {
+          // Offscreen Canvas frame contrast enhancement
+          const video = videoRef.current;
+          let targetInput: HTMLVideoElement | HTMLCanvasElement = video;
+
+          if (canvasRef.current && video.videoWidth > 0) {
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              // Contrast enhancement image filter
+              ctx.filter = 'contrast(140%) grayscale(100%)';
+              ctx.drawImage(canvas, 0, 0);
+              targetInput = canvas;
+            }
+          }
+
+          const barcodes = await barcodeDetector.detect(targetInput);
+          if (barcodes.length > 0 && barcodes[0].rawValue) {
+            if ('vibrate' in navigator) navigator.vibrate(100);
+            onScan(barcodes[0].rawValue);
+            stopCamera();
             return;
           }
-          try {
-            const barcodes = await barcodeDetector.detect(videoRef.current);
-            if (barcodes.length > 0) {
-              clearInterval(interval);
-              onScan(barcodes[0].rawValue);
-            }
-          } catch (e) {
-            // Frame detection pass
-          }
-        }, 300);
-      } catch (e) {
-        console.warn('Native BarcodeDetector initialization failed:', e);
-      }
+        } catch (e) {
+          // Frame pass
+        } finally {
+          isProcessingRef.current = false;
+          animFrameRef.current = requestAnimationFrame(processFrame);
+        }
+      };
+
+      animFrameRef.current = requestAnimationFrame(processFrame);
+    } catch (e) {
+      console.warn('Native BarcodeDetector initialization error:', e);
     }
   };
 
@@ -155,11 +276,12 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
 
   return (
     <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+      <canvas ref={canvasRef} className="hidden" />
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4 relative">
         <div className="flex justify-between items-center pb-2 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <Camera size={18} className="text-fuchsia-400" />
-            <h3 className="font-bold text-sm text-slate-100">Scan Product Barcode</h3>
+            <h3 className="font-bold text-sm text-slate-100">Scan Barcode (Auto-Focus)</h3>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
             <X size={18} />
@@ -180,14 +302,14 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
           ) : (
             <>
               <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-              <div className="absolute inset-x-6 top-1/2 h-0.5 bg-rose-500 shadow-[0_0_8px_#f43f5e] animate-pulse" />
-              <div className="absolute inset-10 border-2 border-fuchsia-500/40 rounded-xl pointer-events-none" />
+              <div className="absolute inset-x-6 top-1/2 h-0.5 bg-rose-500 shadow-[0_0_10px_#f43f5e] animate-pulse" />
+              <div className="absolute inset-8 border-2 border-fuchsia-500/60 rounded-2xl pointer-events-none shadow-[inset_0_0_15px_rgba(217,70,239,0.3)]" />
             </>
           )}
         </div>
 
         <div className="space-y-2 pt-2 border-t border-slate-800">
-          <label className="text-[11px] text-slate-400 block">Or key code manually:</label>
+          <label className="text-[11px] text-slate-400 block">Or key barcode manually:</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -242,6 +364,10 @@ export default function POSSystem() {
   const [isProductCameraOpen, setIsProductCameraOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
+  // Bluetooth Printer State
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [btStatus, setBtStatus] = useState<string>('');
+
   // Product Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -266,8 +392,6 @@ export default function POSSystem() {
     { id: 'l2', customerName: 'Maria Santos', phone: '09189876543', description: 'Grocery items', amount: 320, status: 'paid' },
   ]);
 
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-
   // Fetch Supabase data on mount
   useEffect(() => {
     fetchProducts();
@@ -278,11 +402,7 @@ export default function POSSystem() {
   const fetchProducts = async () => {
     setIsLoadingProducts(true);
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('name');
-
+      const { data, error } = await supabase.from('products').select('*').order('name');
       if (error) {
         console.error('Error fetching products:', error);
       } else if (data) {
@@ -309,11 +429,7 @@ export default function POSSystem() {
   const fetchTransactions = async () => {
     setIsLoadingTransactions(true);
     try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .order('timestamp', { ascending: false });
-
+      const { data, error } = await supabase.from('transactions').select('*').order('timestamp', { ascending: false });
       if (error) {
         console.error('Error fetching transactions:', error);
       } else if (data) {
@@ -341,15 +457,6 @@ export default function POSSystem() {
     }
   };
 
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, []);
-
   // Financial Calculations
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const netTotal = Math.max(0, subtotal - discount + extraFee + deliveryFee);
@@ -369,9 +476,7 @@ export default function POSSystem() {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+        return prev.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
       }
       return [...prev, { ...product, quantity: 1 }];
     });
@@ -466,7 +571,115 @@ export default function POSSystem() {
     }
   };
 
-  // Complete & Persist Transaction (Writes to `transactions` & `inventory_ledger`)
+  // Direct Bluetooth ESC/POS Print & Cashbox Trigger Handler
+  const handleBluetoothPrint = async (receipt: ReceiptData) => {
+    if (!('bluetooth' in navigator)) {
+      alert('Web Bluetooth API is not supported in this browser/device.');
+      return;
+    }
+
+    setIsPrinting(true);
+    setBtStatus('Searching for printer...');
+
+    try {
+      // Standard ESC/POS printer Bluetooth service UUIDs
+      const device = await (navigator as any).bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [
+          '000018f0-0000-1000-8000-00805f9b34fb', // Standard Thermal Printer Service
+          '0000af00-0000-1000-8000-00805f9b34fb',
+          'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+        ],
+      });
+
+      setBtStatus('Connecting to printer...');
+      const server = await device.gatt.connect();
+
+      // Locate writable characteristic
+      const services = await server.getPrimaryServices();
+      let writeCharacteristic: any = null;
+
+      for (const service of services) {
+        const characteristics = await service.getCharacteristics();
+        for (const char of characteristics) {
+          if (char.properties.write || char.properties.writeWithoutResponse) {
+            writeCharacteristic = char;
+            break;
+          }
+        }
+        if (writeCharacteristic) break;
+      }
+
+      if (!writeCharacteristic) {
+        throw new Error('No writable characteristic found on printer.');
+      }
+
+      setBtStatus('Printing & kicking cashbox...');
+      const buffer = buildEscPosReceiptBuffer(receipt, true);
+
+      // Write in chunks to prevent Bluetooth buffer overflow
+      const chunkSize = 100;
+      for (let i = 0; i < buffer.length; i += chunkSize) {
+        const chunk = buffer.slice(i, i + chunkSize);
+        if (writeCharacteristic.properties.writeWithoutResponse) {
+          await writeCharacteristic.writeValueWithoutResponse(chunk);
+        } else {
+          await writeCharacteristic.writeValue(chunk);
+        }
+      }
+
+      setBtStatus('Print successful! Cashbox unlocked.');
+      setTimeout(() => {
+        setBtStatus('');
+        setIsPrinting(false);
+      }, 2000);
+    } catch (err: any) {
+      console.error('Bluetooth Print Error:', err);
+      setBtStatus('');
+      setIsPrinting(false);
+      alert(`Bluetooth print failed: ${err.message || err}`);
+    }
+  };
+
+  // Direct Cashbox Open Trigger (Standalone)
+  const handleKickCashbox = async () => {
+    if (!('bluetooth' in navigator)) {
+      alert('Web Bluetooth API is not supported.');
+      return;
+    }
+
+    try {
+      const device = await (navigator as any).bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'],
+      });
+      const server = await device.gatt.connect();
+      const services = await server.getPrimaryServices();
+      let writeChar: any = null;
+
+      for (const service of services) {
+        const chars = await service.getCharacteristics();
+        for (const c of chars) {
+          if (c.properties.write || c.properties.writeWithoutResponse) {
+            writeChar = c;
+            break;
+          }
+        }
+        if (writeChar) break;
+      }
+
+      if (writeChar) {
+        // Pulse cashbox command: ESC p 0 25 250
+        const pulse = new Uint8Array([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+        await writeChar.writeValue(pulse);
+        alert('Cashbox pulse command sent!');
+      }
+    } catch (e: any) {
+      alert(`Cashbox trigger error: ${e.message}`);
+    }
+  };
+
+  // Complete & Persist Transaction
   const handleCompleteTransaction = async () => {
     const trxId = `TRX-${Math.floor(10000 + Math.random() * 90000)}`;
     const timestamp = new Date().toISOString();
@@ -509,15 +722,18 @@ export default function POSSystem() {
 
       if (trxError) console.error('Failed transaction insert:', trxError);
 
-      // 2. Insert into `sales` and `sale_items` tables
-      const { data: salesData } = await supabase.from('sales').insert([
-        {
-          total_amount: netTotal,
-          payment_method: paymentMethod,
-          customer_name: customer.name || 'Walk-in Customer',
-          created_at: timestamp,
-        }
-      ]).select();
+      // 2. Insert into `sales` and `sale_items`
+      const { data: salesData } = await supabase
+        .from('sales')
+        .insert([
+          {
+            total_amount: netTotal,
+            payment_method: paymentMethod,
+            customer_name: customer.name || 'Walk-in Customer',
+            created_at: timestamp,
+          },
+        ])
+        .select();
 
       if (salesData && salesData.length > 0) {
         const saleId = salesData[0].id;
@@ -533,11 +749,8 @@ export default function POSSystem() {
       // 3. Deduct Stock & Write to `inventory_ledger`
       for (const item of cart) {
         const newStock = Math.max(0, item.stock - item.quantity);
-
-        // Update product stock
         await supabase.from('products').update({ stock: newStock }).eq('id', item.id);
 
-        // Log to inventory_ledger
         await supabase.from('inventory_ledger').insert([
           {
             product_id: item.id,
@@ -548,7 +761,6 @@ export default function POSSystem() {
         ]);
       }
 
-      // Refresh database tables
       fetchProducts();
       fetchTransactions();
     } catch (err) {
@@ -788,7 +1000,6 @@ export default function POSSystem() {
               </div>
             </div>
 
-            {/* Metrics Overview Cards including GCash Card */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
                 <span className="text-slate-400 text-xs block font-semibold">Total Revenue</span>
@@ -796,7 +1007,6 @@ export default function POSSystem() {
                 <span className="text-[10px] text-slate-500 block font-semibold">{transactions.length} total transactions</span>
               </div>
 
-              {/* GCash Payment Analytics Card */}
               <div className="bg-slate-900 border border-blue-500/30 p-4 rounded-2xl space-y-1 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/30">
                 <div className="flex justify-between items-center">
                   <span className="text-blue-300 text-xs block font-semibold">GCash Payments</span>
@@ -819,7 +1029,6 @@ export default function POSSystem() {
               </div>
             </div>
 
-            {/* Server Synced Transactions Table */}
             <div className="space-y-3">
               <h3 className="font-bold text-sm text-slate-200">Supabase Transaction Log</h3>
               <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
@@ -931,8 +1140,19 @@ export default function POSSystem() {
               <div className="p-3 bg-fuchsia-600/20 text-fuchsia-400 rounded-xl"><Sliders size={22} /></div>
               <div>
                 <h2 className="text-lg font-bold">Hardware & System Settings</h2>
-                <p className="text-xs text-slate-400">Configure scanner hardware and visual theme</p>
+                <p className="text-xs text-slate-400">Configure scanner hardware and Bluetooth devices</p>
               </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <h3 className="font-semibold text-slate-100 text-sm">Bluetooth Thermal Printer & Cash Drawer</h3>
+              <p className="text-xs text-slate-400">Pair your ESC/POS thermal printer to enable direct receipt printing and automatic cashbox unlocking.</p>
+              <button
+                onClick={handleKickCashbox}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-700 flex items-center gap-2 transition"
+              >
+                <Unlock size={16} className="text-amber-400" /> Test Open Cashbox Pulse
+              </button>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
@@ -940,7 +1160,7 @@ export default function POSSystem() {
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { id: 'hardware', label: 'Hardware Gun', desc: 'USB/BT barcode gun' },
-                  { id: 'camera', label: 'Device Camera', desc: 'Integrated viewfinder' },
+                  { id: 'camera', label: 'Device Camera', desc: 'Integrated auto-focus' },
                   { id: 'manual', label: 'Manual Key', desc: 'Direct search input' },
                 ].map((option) => (
                   <button
@@ -1137,9 +1357,23 @@ export default function POSSystem() {
               <p className="text-gray-600">Please Come Again</p>
             </div>
 
-            <div className="flex items-center justify-center gap-2 mt-5 w-full print-hide">
-              <button onClick={() => window.print()} className="bg-fuchsia-600 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5"><Printer size={14} /> Print</button>
-              <button onClick={() => setReceiptData(null)} className="bg-slate-800 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl">Close</button>
+            {btStatus && (
+              <p className="text-[10px] font-bold text-fuchsia-600 text-center mt-2 print-hide animate-pulse">{btStatus}</p>
+            )}
+
+            <div className="flex flex-col gap-2 mt-4 w-full print-hide">
+              <button
+                disabled={isPrinting}
+                onClick={() => handleBluetoothPrint(receiptData)}
+                className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition shadow-lg shadow-blue-600/20"
+              >
+                <Bluetooth size={14} /> BT Print & Open Cashbox
+              </button>
+
+              <div className="flex items-center justify-center gap-2">
+                <button onClick={() => window.print()} className="flex-1 bg-slate-800 text-slate-200 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5"><Printer size={14} /> Web Print</button>
+                <button onClick={() => setReceiptData(null)} className="flex-1 bg-slate-800 text-slate-300 font-bold text-xs py-2 rounded-xl">Close</button>
+              </div>
             </div>
           </div>
         </div>
