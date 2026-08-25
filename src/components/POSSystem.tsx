@@ -12,6 +12,7 @@ import {
   Minus,
   Trash2,
   Camera,
+  Wifi,
   X,
   Mail,
   Download,
