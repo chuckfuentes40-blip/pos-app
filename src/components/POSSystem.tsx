@@ -93,6 +93,8 @@ export interface LedgerEntry {
   description: string;
 }
 
+const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
 // --- Initial Sample Data ---
 const INITIAL_PRODUCTS: Product[] = [
   { id: '1', name: 'Coke Mismo 300ml', price: 20, cost: 15, stock: 45, lowStockThreshold: 10, unit: 'pcs', barcode: '4800016021011', category: 'Beverages' },
@@ -539,8 +541,9 @@ useEffect(() => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-const handleCheckout = async () => {
+const handleCheckout = async (action: 'bt_print' | 'standard_print' | 'close' = 'close') => {
   if (cart.length === 0) return;
+  
   if (paymentMethod === 'cash' && parsedCash < netSales) {
     alert('Cash received is insufficient!');
     return;
@@ -553,75 +556,67 @@ const handleCheckout = async () => {
     id: transactionId,
     timestamp: currentTimestamp,
     items: [...cart],
-    subtotal,
-    discount: discountAmount,
-    serviceFee,
-    deliveryFee,
-    netSales,
+    subtotal: subtotal || 0,
+    discount: discountAmount || 0,
+    serviceFee: serviceFee || 0,
+    deliveryFee: deliveryFee || 0,
+    netSales: netSales || 0,
     paymentMethod,
     cashReceived: paymentMethod === 'cash' ? parsedCash : undefined,
     changeDue: paymentMethod === 'cash' ? changeDue : undefined,
     gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : undefined,
-    customer: customer.name ? { ...customer } : undefined,
+    customer: customer?.name ? { ...customer } : undefined,
   };
 
-  // 1. Update local UI state immediately
-  const updatedProducts = products.map((prod) => {
-    const cartItem = cart.find((c) => c.id === prod.id);
-    if (cartItem) {
-      return { ...prod, stock: Math.max(0, prod.stock - cartItem.quantity) };
-    }
-    return prod;
-  });
-
-  setProducts(updatedProducts);
-  setTransactions((prev) => [newTransaction, ...prev]);
+  // 1. Local state updates
+  setTransactions((prev) => [newTransaction, ...(prev || [])]);
   setReceiptData(newTransaction);
 
-  // 2. Format payload to match exact Supabase ALL-LOWERCASE column names
-  const supabasePayload = {
-    id: transactionId,
-    timestamp: currentTimestamp,
-    items: cart, // Saved as jsonb
-    subtotal: subtotal,
-    discount: discountAmount,
-    servicefee: serviceFee,
-    deliveryfee: deliveryFee,
-    netsales: netSales,
-    paymentmethod: paymentMethod,
-    cashreceived: paymentMethod === 'cash' ? parsedCash : null,
-    changedue: paymentMethod === 'cash' ? changeDue : null,
-    gcashrefnumber: paymentMethod === 'gcash' ? gcashRefNumber : null,
-    customer: customer.name ? customer : null, // Saved as jsonb
-  };
+  // 2. Persist to Supabase
+  if (navigator.onLine) {
+    const supabasePayload = {
+      id: transactionId,
+      timestamp: currentTimestamp,
+      items: cart,
+      subtotal: subtotal || 0,
+      discount: discountAmount || 0,
+      servicefee: serviceFee || 0,
+      deliveryfee: deliveryFee || 0,
+      netsales: netSales || 0,
+      paymentmethod: paymentMethod,
+      cashreceived: paymentMethod === 'cash' ? parsedCash : null,
+      changedue: paymentMethod === 'cash' ? changeDue : null,
+      gcashrefnumber: paymentMethod === 'gcash' ? gcashRefNumber || null : null,
+      customer: customer?.name ? customer : null,
+    };
 
-  // 3. Persist transaction and sync remaining stock to Supabase
-  try {
-    const { error } = await supabase
-      .from('transactions')
-      .insert([supabasePayload]);
+    supabase.from('transactions').insert([supabasePayload]).then(({ error }) => {
+      if (error) console.error('Supabase Error:', error.message);
+    });
 
-    if (error) {
-      console.error('Supabase Transaction Save Error:', error.message);
-      alert(`Saved locally, but failed to sync transaction to Supabase: ${error.message}`);
-    } else {
-      // Sync deducted stock for each purchased item back to Supabase
-      for (const item of cart) {
-        const product = products.find((p) => p.id === item.id);
-        if (product) {
-          const newStock = Math.max(0, product.stock - item.quantity);
-          await supabase
-            .from('products')
-            .update({ stock: newStock })
-            .eq('id', item.id);
-        }
+    // Update stock in background
+    for (const item of cart) {
+      const product = products.find((p) => p.id === item.id);
+      if (product) {
+        const newStock = Math.max(0, (product.stock || 0) - item.quantity);
+        supabase.from('products').update({ stock: newStock }).eq('id', item.id);
       }
     }
-  } catch (err: any) {
-    console.error('Network Error saving to Supabase:', err);
   }
 
-  // Reset Cart and Order State
+  // 3. Trigger requested print action
+  if (action === 'standard_print') {
+    setTimeout(() => window.print(), 200);
+  } else if (action === 'bt_print') {
+    // Call your custom Bluetooth print function if defined
+    if (typeof (window as any).printViaBluetooth === 'function') {
+      (window as any).printViaBluetooth(newTransaction);
+    } else {
+      window.print();
+    }
+  }
+
+  // 4. Clear forms and close modal
   setCart([]);
   setDiscountAmount(0);
   setServiceFee(0);
@@ -630,6 +625,7 @@ const handleCheckout = async () => {
   setGcashRefNumber('');
   setCustomer({ name: '', phone: '', address: '', notes: '' });
   setShowCustomerFields(false);
+  setIsPaymentModalOpen(false);
 };
  
 
@@ -754,13 +750,48 @@ const handleDeleteProduct = (id: string) => {
     const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCat;
   });
-// Analytics Metrics (Guarded against undefined values & Supabase lowercase keys)
-  const totalSalesVal = (transactions || []).reduce((sum, t) => {
+//// 1. Time Filter State
+  const [timeFilter, setTimeFilter] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('daily');
+
+  // 2. Filter transactions based on selected range
+  const filteredTransactions = (transactions || []).filter((t) => {
+    if (!t.timestamp) return false;
+    const tDate = new Date(t.timestamp);
+    const now = new Date();
+
+    if (timeFilter === 'daily') {
+      return tDate.toDateString() === now.toDateString();
+    }
+    if (timeFilter === 'weekly') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(now.getDate() - 7);
+      return tDate >= sevenDaysAgo;
+    }
+    if (timeFilter === 'monthly') {
+      return (
+        tDate.getMonth() === now.getMonth() &&
+        tDate.getFullYear() === now.getFullYear()
+      );
+    }
+    return true; // 'all'
+  });
+
+  // 3. Analytics Metrics (Calculated from filteredTransactions)
+  const totalSalesVal = filteredTransactions.reduce((sum, t) => {
     const val = Number(t.netSales ?? (t as any).netsales ?? 0);
     return sum + (isNaN(val) ? 0 : val);
   }, 0);
 
-  const totalCostVal = (transactions || []).reduce((sum, t) => {
+  const totalGCashSalesVal = filteredTransactions.reduce((sum, t) => {
+    const method = (t.paymentMethod || (t as any).paymentmethod || '').toLowerCase();
+    if (method === 'gcash') {
+      const val = Number(t.netSales ?? (t as any).netsales ?? 0);
+      return sum + (isNaN(val) ? 0 : val);
+    }
+    return sum;
+  }, 0);
+
+  const totalCostVal = filteredTransactions.reduce((sum, t) => {
     const items = Array.isArray(t.items) ? t.items : [];
     const costOfItems = items.reduce((c, i) => {
       const cost = Number(i.cost ?? (i as any).unit_cost ?? 0);
@@ -1225,8 +1256,9 @@ const handleDeleteProduct = (id: string) => {
                   </div>
 
                   {/* Pay Button */}
+                 
                   <button
-                    onClick={handleCheckout}
+                    onClick={() => setIsPaymentModalOpen(true)}
                     disabled={cart.length === 0}
                     className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-lg ${
                       cart.length > 0
@@ -1319,39 +1351,75 @@ const handleDeleteProduct = (id: string) => {
          {/* 3. Analytics Tab */}
         {activeTab === 'analytics' && (
           <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
-            <div className="flex items-center justify-between">
+            {/* Header & Filter Controls */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg sm:text-xl font-bold">Business Analytics</h2>
                 <p className="text-xs text-slate-400">Sales performance and financial metrics</p>
               </div>
-              <button
-                onClick={() => setIsExportModalOpen(true)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700"
-              >
-                <Mail size={14} /> Export Report
-              </button>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Time Range Selector */}
+                <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 flex items-center gap-1 text-xs font-semibold">
+                  {(['daily', 'weekly', 'monthly', 'all'] as const).map((range) => (
+                    <button
+                      key={range}
+                      onClick={() => setTimeFilter(range)}
+                      className={`px-3 py-1.5 rounded-lg capitalize transition ${
+                        timeFilter === range
+                          ? 'bg-blue-600 text-white font-bold shadow'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                      }`}
+                    >
+                      {range === 'all' ? 'All Time' : range}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setIsExportModalOpen(true)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700"
+                >
+                  <Mail size={14} /> Export Report
+                </button>
+              </div>
             </div>
 
             {/* KPI Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {/* Total Revenue */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
                 <p className="text-xs text-slate-400 font-semibold mb-1">Total Sales Revenue</p>
                 <p className="text-2xl font-black font-mono text-emerald-400">
                   ₱{(totalSalesVal || 0).toFixed(2)}
                 </p>
               </div>
+
+              {/* Total GCash Sales */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p className="text-xs text-slate-400 font-semibold mb-1">Total GCash Sales</p>
+                <p className="text-2xl font-black font-mono text-blue-400">
+                  ₱{(totalGCashSalesVal || 0).toFixed(2)}
+                </p>
+              </div>
+
+              {/* Gross Profit */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
                 <p className="text-xs text-slate-400 font-semibold mb-1">Gross Profit</p>
                 <p className="text-2xl font-black font-mono text-fuchsia-400">
                   ₱{(grossProfit || 0).toFixed(2)}
                 </p>
               </div>
+
+              {/* Total Orders */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
                 <p className="text-xs text-slate-400 font-semibold mb-1">Total Orders</p>
                 <p className="text-2xl font-black font-mono text-white">
-                  {(transactions || []).length}
+                  {filteredTransactions.length}
                 </p>
               </div>
+
+              {/* Inventory Capital Value */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
                 <p className="text-xs text-slate-400 font-semibold mb-1">Inventory Capital Value</p>
                 <p className="text-2xl font-black font-mono text-amber-400">
@@ -1362,9 +1430,11 @@ const handleDeleteProduct = (id: string) => {
 
             {/* Transaction Logs */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
-              <h3 className="text-sm font-bold text-slate-100 mb-4">Recent Sales Activity</h3>
+              <h3 className="text-sm font-bold text-slate-100 mb-4 capitalize">
+                Recent Sales Activity ({timeFilter})
+              </h3>
               <div className="space-y-2">
-                {(transactions || []).map((trx) => {
+                {filteredTransactions.map((trx) => {
                   const netSalesVal = Number(trx.netSales ?? (trx as any).netsales ?? 0);
                   const itemsCount = Array.isArray(trx.items) ? trx.items.length : 0;
                   const payment = trx.paymentMethod || (trx as any).paymentmethod || 'CASH';
@@ -1377,14 +1447,21 @@ const handleDeleteProduct = (id: string) => {
                       <div>
                         <span className="font-mono font-bold text-fuchsia-400">{trx.id}</span>
                         <p className="text-[10px] text-slate-500">
-                          {trx.timestamp ? new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'} • {itemsCount} items
+                          {trx.timestamp
+                            ? new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : 'N/A'}{' '}
+                          • {itemsCount} items
                         </p>
                       </div>
                       <div className="text-right">
                         <span className="font-mono font-bold text-white">
                           ₱{netSalesVal.toFixed(2)}
                         </span>
-                        <span className="block text-[10px] uppercase font-bold text-slate-400">
+                        <span
+                          className={`block text-[10px] uppercase font-bold ${
+                            payment.toLowerCase() === 'gcash' ? 'text-blue-400' : 'text-slate-400'
+                          }`}
+                        >
                           {payment}
                         </span>
                       </div>
@@ -1584,6 +1661,184 @@ const handleDeleteProduct = (id: string) => {
                     {theme === 'light' && <Check size={16} className="text-fuchsia-400" />}
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+          {/* Large Font Checkout & Payment Modal */}
+          {isPaymentModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h2 className="text-lg font-bold text-white uppercase tracking-wider">Checkout Payment</h2>
+                  <button
+                    onClick={() => setIsPaymentModalOpen(false)}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Payment Method Selector */}
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                  <button
+                    onClick={() => setPaymentMethod('cash')}
+                    className={`py-2 rounded-lg font-bold text-xs uppercase transition ${
+                      paymentMethod === 'cash' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    💵 Cash
+                  </button>
+                  <button
+                    onClick={() => setPaymentMethod('gcash')}
+                    className={`py-2 rounded-lg font-bold text-xs uppercase transition ${
+                      paymentMethod === 'gcash' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    📱 GCash
+                  </button>
+                </div>
+
+                {/* Large Numbers Display Area */}
+                <div className="space-y-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  {/* Net Total Display */}
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-semibold text-sm">Net Total:</span>
+                    <span className="text-2xl font-black font-mono text-emerald-400">
+                      ₱{netSales.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Cash Tendered Input Field */}
+                  {paymentMethod === 'cash' ? (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                        Cash Tendered
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-500 font-mono">
+                          ₱
+                        </span>
+                        <input
+                          type="number"
+                          step="any"
+                          autoFocus
+                          placeholder="0.00"
+                          value={cashReceived}
+                          onChange={(e) => setCashReceived(e.target.value)}
+                          className="w-full pl-9 pr-4 py-3 bg-slate-900 border-2 border-fuchsia-500/50 focus:border-fuchsia-500 rounded-xl text-3xl font-black font-mono text-white outline-none"
+                        />
+                      </div>
+
+                      {/* Quick Cash Buttons */}
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {[netSales, 100, 500, 1000].map((amount) => (
+                          <button
+                            key={amount}
+                            onClick={() => setCashReceived(amount.toString())}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold py-1.5 rounded-lg border border-slate-700"
+                          >
+                            ₱{amount}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    /* GCash Ref Input */
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                        GCash Reference #
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 10029384"
+                        value={gcashRefNumber}
+                        onChange={(e) => setGcashRefNumber(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-lg font-mono text-white outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  )}
+
+                  {/* Change Due Display */}
+                  {paymentMethod === 'cash' && (
+                    <div className="flex justify-between items-center border-t border-slate-800 pt-3">
+                      <span className="text-slate-400 font-semibold text-sm">Change:</span>
+                      <span
+                        className={`text-3xl font-black font-mono ${
+                          parsedCash >= netSales ? 'text-fuchsia-400' : 'text-red-400'
+                        }`}
+                      >
+                        ₱{changeDue.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Dynamic Receipt Preview (Appears when cash inputted is sufficient) */}
+                {(paymentMethod === 'gcash' || parsedCash >= netSales) && (
+                  <div className="bg-white text-slate-900 p-4 rounded-2xl shadow-inner text-xs font-mono max-h-48 overflow-y-auto space-y-1 animate-in fade-in duration-200">
+                    <div className="text-center font-bold text-sm border-b pb-1 border-slate-200">
+                      IÑAKI SARI-SARI STORE
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-500">
+                      <span>{new Date().toLocaleDateString()}</span>
+                      <span>{new Date().toLocaleTimeString()}</span>
+                    </div>
+                    <div className="border-b border-dashed border-slate-300 py-1 space-y-1">
+                      {cart.map((item) => (
+                        <div key={item.id} className="flex justify-between">
+                          <span>{item.name} x{item.quantity}</span>
+                          <span>₱{(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="pt-1 space-y-0.5">
+                      <div className="flex justify-between font-bold">
+                        <span>TOTAL:</span>
+                        <span>₱{netSales.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span>PAYMENT ({paymentMethod.toUpperCase()}):</span>
+                        <span>₱{(paymentMethod === 'cash' ? parsedCash : netSales).toFixed(2)}</span>
+                      </div>
+                      {paymentMethod === 'cash' && (
+                        <div className="flex justify-between text-[10px] font-bold">
+                          <span>CHANGE:</span>
+                          <span>₱{changeDue.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-3 gap-2 pt-2">
+                  <button
+                    disabled={paymentMethod === 'cash' && parsedCash < netSales}
+                    onClick={() => handleCheckout('bt_print')}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold py-3 rounded-xl transition flex items-center justify-center gap-1 shadow-lg shadow-blue-600/30"
+                  >
+                    <span>Bluetooth</span>
+                  </button>
+
+                  <button
+                    disabled={paymentMethod === 'cash' && parsedCash < netSales}
+                    onClick={() => handleCheckout('standard_print')}
+                    className="bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-50 text-white text-xs font-bold py-3 rounded-xl transition shadow-lg shadow-fuchsia-600/30"
+                  >
+                    Print
+                  </button>
+
+                  <button
+                    disabled={paymentMethod === 'cash' && parsedCash < netSales}
+                    onClick={() => handleCheckout('close')}
+                    className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-bold py-3 rounded-xl transition border border-slate-700"
+                  >
+                    Complete
+                  </button>
+                </div>
+
               </div>
             </div>
           )}
