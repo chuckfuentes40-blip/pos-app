@@ -93,7 +93,7 @@ export interface LedgerEntry {
   description: string;
 }
 
-const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
 
 // --- Initial Sample Data ---
 const INITIAL_PRODUCTS: Product[] = [
@@ -193,6 +193,8 @@ export default function POSSystem() {
   const [formLowStock, setFormLowStock] = useState('5');
   const [formUnit, setFormUnit] = useState('pcs');
   const [formBarcode, setFormBarcode] = useState('');
+
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   // ✅ PLACE IT HERE (Inside POSSystem, after state definitions)
   const handleOpenProductModal = (product?: Product) => {
