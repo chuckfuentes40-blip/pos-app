@@ -199,6 +199,135 @@ export default function POSSystem() {
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
+  const handleBluetoothPrint = async () => {
+  if (!receiptData) return;
+
+  if (!('bluetooth' in navigator)) {
+    alert('Web Bluetooth is not supported in this browser. Please use Chrome on Android or PC.');
+    return;
+  }
+
+  try {
+    // 1. Request access to nearby Bluetooth printers
+    const device = await (navigator as any).bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [
+        '000018f0-0000-1000-8000-00805f9b34fb', // Standard ESC/POS
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // Serial Port
+        'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
+      ]
+    });
+
+    // 2. Connect to GATT Server
+    const server = await device.gatt.connect();
+
+    // 3. Find Printable Service & Characteristic
+    const services = await server.getPrimaryServices();
+    let writeCharacteristic = null;
+
+    for (const service of services) {
+      const characteristics = await service.getCharacteristics();
+      for (const char of characteristics) {
+        if (char.properties.write || char.properties.writeWithoutResponse) {
+          writeCharacteristic = char;
+          break;
+        }
+      }
+      if (writeCharacteristic) break;
+    }
+
+    if (!writeCharacteristic) {
+      alert('Could not find a writeable channel on this Bluetooth device.');
+      return;
+    }
+
+    // 4. Build ESC/POS Raw Data Stream (32 character width for 58mm)
+    const encoder = new TextEncoder();
+    let esc = '';
+
+    // ESC/POS Command Constants
+    const INIT = '\x1B\x40';
+    const ALIGN_CENTER = '\x1B\x61\x01';
+    const ALIGN_LEFT = '\x1B\x61\x00';
+    const ALIGN_RIGHT = '\x1B\x61\x02';
+    const BOLD_ON = '\x1B\x45\x01';
+    const BOLD_OFF = '\x1B\x45\x00';
+    const LINE_FEED = '\n';
+
+    // Helper for 32-column formatted lines
+    const formatLine = (left: string, right: string) => {
+      const maxLen = 32;
+      const spaceLen = Math.max(1, maxLen - (left.length + right.length));
+      return left + ' '.repeat(spaceLen) + right + LINE_FEED;
+    };
+
+    // Build Receipt Content
+    esc += INIT;
+    esc += ALIGN_CENTER + BOLD_ON + 'INAKI STORE' + LINE_FEED + BOLD_OFF;
+    esc += new Date(receiptData.timestamp).toLocaleString('en-PH') + LINE_FEED;
+    esc += `Receipt #: ${receiptData.id}` + LINE_FEED;
+    esc += '--------------------------------' + LINE_FEED;
+
+    // Items
+    esc += ALIGN_LEFT;
+    receiptData.items.forEach((item) => {
+      const name = item.name.length > 20 ? item.name.substring(0, 18) + '..' : item.name;
+      const qtyPrice = `${item.quantity} x P${item.price.toFixed(2)}`;
+      const total = `P${(item.price * item.quantity).toFixed(2)}`;
+
+      esc += BOLD_ON + name + BOLD_OFF + LINE_FEED;
+      esc += formatLine(`  ${qtyPrice}`, total);
+    });
+
+    esc += '--------------------------------' + LINE_FEED;
+
+    // Totals
+    if (receiptData.discount > 0) {
+      esc += formatLine('DISCOUNT:', `-P${receiptData.discount.toFixed(2)}`);
+    }
+    if (receiptData.serviceFee > 0) {
+      esc += formatLine('SERVICE FEE:', `+P${receiptData.serviceFee.toFixed(2)}`);
+    }
+    if (receiptData.deliveryFee > 0) {
+      esc += formatLine('DELIVERY FEE:', `+P${receiptData.deliveryFee.toFixed(2)}`);
+    }
+
+    esc += BOLD_ON + formatLine('TOTAL:', `P${receiptData.netSales.toFixed(2)}`) + BOLD_OFF;
+    esc += formatLine('PAYMENT:', receiptData.paymentMethod.toUpperCase());
+
+    if (receiptData.paymentMethod === 'cash') {
+      esc += formatLine('RECEIVED:', `P${(receiptData.cashReceived || 0).toFixed(2)}`);
+      esc += formatLine('CHANGE:', `P${(receiptData.changeDue || 0).toFixed(2)}`);
+    } else if (receiptData.paymentMethod === 'gcash' && receiptData.gcashRefNumber) {
+      esc += formatLine('REF NO:', receiptData.gcashRefNumber);
+    }
+
+    if (receiptData.customer?.name) {
+      esc += '--------------------------------' + LINE_FEED;
+      esc += `Customer: ${receiptData.customer.name}` + LINE_FEED;
+    }
+
+    // Footer & Extra Feeds for Paper Tear
+    esc += '--------------------------------' + LINE_FEED;
+    esc += ALIGN_CENTER + BOLD_ON + 'Maraming Salamat Po!' + LINE_FEED + BOLD_OFF;
+    esc += 'Please Come Again' + LINE_FEED;
+    esc += LINE_FEED + LINE_FEED + LINE_FEED; // Feed paper
+
+    // 5. Send Chunked Bytes to Bluetooth Printer (20-byte MTU limit handling)
+    const data = encoder.encode(esc);
+    const chunkSize = 20;
+    for (let i = 0; i < data.length; i += chunkSize) {
+      const chunk = data.slice(i, i + chunkSize);
+      await writeCharacteristic.writeValue(chunk);
+    }
+
+    alert('Receipt printed successfully!');
+  } catch (error: any) {
+    console.error('Bluetooth Print Error:', error);
+    alert(`Bluetooth Print Failed: ${error.message || 'Device disconnected or cancelled'}`);
+  }
+};
+
 // Load saved theme preference on mount
 useEffect(() => {
   const savedTheme = localStorage.getItem('pos_theme') as 'dark' | 'light';
@@ -1699,25 +1828,9 @@ const handleDeleteProduct = (id: string) => {
       {/* Paper Feed Buffer for Thermal Cut */}
       <div className="h-4 print:h-8" />
 
-      {/* Screen Control Buttons */}
-      <div className="mt-3 flex gap-2 print:hidden print-hide">
-        <button
-          onClick={() => window.print()}
-          className="flex-1 bg-fuchsia-600 text-white py-2 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs hover:bg-fuchsia-500 transition"
-        >
-          <Printer size={14} /> Print
-        </button>
-        <button
-          onClick={() => setReceiptData(null)}
-          className="bg-gray-200 text-gray-800 px-3 py-2 rounded-xl font-sans font-semibold text-xs hover:bg-gray-300 transition"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-      {/* Screen Control Buttons */}
+    {/* Screen Control Buttons */}
 <div className="mt-3 flex flex-col sm:flex-row gap-2 print:hidden print-hide">
-  {/* Bluetooth Direct Print */}
+  {/* Direct Bluetooth Print */}
   <button
     onClick={handleBluetoothPrint}
     className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1.5 text-xs transition"
@@ -1725,7 +1838,7 @@ const handleDeleteProduct = (id: string) => {
     <Bluetooth size={14} /> Direct BT Print
   </button>
 
-  {/* Browser System Print fallback */}
+  {/* Standard Browser System Print */}
   <button
     onClick={() => window.print()}
     className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs transition"
@@ -1733,6 +1846,7 @@ const handleDeleteProduct = (id: string) => {
     <Printer size={14} /> Print
   </button>
 
+  {/* Close Modal */}
   <button
     onClick={() => setReceiptData(null)}
     className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-xl font-sans font-semibold text-xs transition"
@@ -1740,139 +1854,14 @@ const handleDeleteProduct = (id: string) => {
     Close
   </button>
 </div>
+    </div>
 
   </div>
 )}
 
 
+
     </div>
   );
 }
-const handleBluetoothPrint = async () => {
-  if (!receiptData) return;
 
-  if (!('bluetooth' in navigator)) {
-    alert('Web Bluetooth is not supported in this browser. Please use Chrome on Android or PC.');
-    return;
-  }
-
-  try {
-    // 1. Request access to nearby Bluetooth printers
-    const device = await (navigator as any).bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [
-        '000018f0-0000-1000-8000-00805f9b34fb', // Standard ESC/POS
-        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // Serial Port
-        'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
-      ]
-    });
-
-    // 2. Connect to GATT Server
-    const server = await device.gatt.connect();
-
-    // 3. Find Printable Service & Characteristic
-    const services = await server.getPrimaryServices();
-    let writeCharacteristic = null;
-
-    for (const service of services) {
-      const characteristics = await service.getCharacteristics();
-      for (const char of characteristics) {
-        if (char.properties.write || char.properties.writeWithoutResponse) {
-          writeCharacteristic = char;
-          break;
-        }
-      }
-      if (writeCharacteristic) break;
-    }
-
-    if (!writeCharacteristic) {
-      alert('Could not find a writeable channel on this Bluetooth device.');
-      return;
-    }
-
-    // 4. Build ESC/POS Raw Data Stream (32 character width for 58mm)
-    const encoder = new TextEncoder();
-    let esc = '';
-
-    // ESC/POS Command Constants
-    const INIT = '\x1B\x40';
-    const ALIGN_CENTER = '\x1B\x61\x01';
-    const ALIGN_LEFT = '\x1B\x61\x00';
-    const ALIGN_RIGHT = '\x1B\x61\x02';
-    const BOLD_ON = '\x1B\x45\x01';
-    const BOLD_OFF = '\x1B\x45\x00';
-    const LINE_FEED = '\n';
-
-    // Helper for 32-column formatted lines
-    const formatLine = (left: string, right: string) => {
-      const maxLen = 32;
-      const spaceLen = Math.max(1, maxLen - (left.length + right.length));
-      return left + ' '.repeat(spaceLen) + right + LINE_FEED;
-    };
-
-    // Build Receipt Content
-    esc += INIT;
-    esc += ALIGN_CENTER + BOLD_ON + 'INAKI STORE' + LINE_FEED + BOLD_OFF;
-    esc += new Date(receiptData.timestamp).toLocaleString('en-PH') + LINE_FEED;
-    esc += `Receipt #: ${receiptData.id}` + LINE_FEED;
-    esc += '--------------------------------' + LINE_FEED;
-
-    // Items
-    esc += ALIGN_LEFT;
-    receiptData.items.forEach((item) => {
-      const name = item.name.length > 20 ? item.name.substring(0, 18) + '..' : item.name;
-      const qtyPrice = `${item.quantity} x P${item.price.toFixed(2)}`;
-      const total = `P${(item.price * item.quantity).toFixed(2)}`;
-
-      esc += BOLD_ON + name + BOLD_OFF + LINE_FEED;
-      esc += formatLine(`  ${qtyPrice}`, total);
-    });
-
-    esc += '--------------------------------' + LINE_FEED;
-
-    // Totals
-    if (receiptData.discount > 0) {
-      esc += formatLine('DISCOUNT:', `-P${receiptData.discount.toFixed(2)}`);
-    }
-    if (receiptData.serviceFee > 0) {
-      esc += formatLine('SERVICE FEE:', `+P${receiptData.serviceFee.toFixed(2)}`);
-    }
-    if (receiptData.deliveryFee > 0) {
-      esc += formatLine('DELIVERY FEE:', `+P${receiptData.deliveryFee.toFixed(2)}`);
-    }
-
-    esc += BOLD_ON + formatLine('TOTAL:', `P${receiptData.netSales.toFixed(2)}`) + BOLD_OFF;
-    esc += formatLine('PAYMENT:', receiptData.paymentMethod.toUpperCase());
-
-    if (receiptData.paymentMethod === 'cash') {
-      esc += formatLine('RECEIVED:', `P${(receiptData.cashReceived || 0).toFixed(2)}`);
-      esc += formatLine('CHANGE:', `P${(receiptData.changeDue || 0).toFixed(2)}`);
-    } else if (receiptData.paymentMethod === 'gcash' && receiptData.gcashRefNumber) {
-      esc += formatLine('REF NO:', receiptData.gcashRefNumber);
-    }
-
-    if (receiptData.customer?.name) {
-      esc += '--------------------------------' + LINE_FEED;
-      esc += `Customer: ${receiptData.customer.name}` + LINE_FEED;
-    }
-
-    // Footer & Extra Feeds for Paper Tear
-    esc += '--------------------------------' + LINE_FEED;
-    esc += ALIGN_CENTER + BOLD_ON + 'Maraming Salamat Po!' + LINE_FEED + BOLD_OFF;
-    esc += 'Please Come Again' + LINE_FEED;
-    esc += LINE_FEED + LINE_FEED + LINE_FEED; // Feed paper
-
-    // 5. Send Chunked Bytes to Bluetooth Printer (20-byte MTU limit handling)
-    const data = encoder.encode(esc);
-    const chunkSize = 20;
-    for (let i = 0; i < data.length; i += chunkSize) {
-      const chunk = data.slice(i, i + chunkSize);
-      await writeCharacteristic.writeValue(chunk);
-    }
-
-    alert('Receipt printed successfully!');
-  } catch (error: any) {
-    console.error('Bluetooth Print Error:', error);
-    alert(`Bluetooth Print Failed: ${error.message || 'Device disconnected or cancelled'}`);
-  }
-};
