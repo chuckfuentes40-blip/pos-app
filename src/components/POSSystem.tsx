@@ -1271,33 +1271,6 @@ const handleDeleteProduct = (id: string) => {
                       </button>
                     </div>
 
-                    {/* Customer Info Toggle */}
-                    <button
-                      onClick={() => setShowCustomerFields(!showCustomerFields)}
-                      className="text-xs text-fuchsia-400 hover:text-fuchsia-300 font-bold flex items-center gap-1"
-                    >
-                      👤 {showCustomerFields ? 'Hide Customer Info' : '+ Attach Customer Info'}
-                    </button>
-
-                    {showCustomerFields && (
-                      <div className="space-y-1.5 pt-1">
-                        <input
-                          type="text"
-                          placeholder="Customer Name"
-                          value={customer.name}
-                          onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                          className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Phone Number"
-                          value={customer.phone}
-                          onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-                          className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white"
-                        />
-                      </div>
-                    )}
-
                     {/* Calculation Breakdown */}
                     <div className="pt-2 border-t border-slate-800/80 space-y-1 text-xs">
                       <div className="flex justify-between text-slate-400">
