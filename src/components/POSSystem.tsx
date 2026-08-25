@@ -1284,8 +1284,7 @@ const handleDeleteProduct = (id: string) => {
                   </div>
                 </div>
                 </div>
-              </div>
-          )}
+                )}
 
           {/* 2. Inventory Tab */}
           {activeTab === 'inventory' && (
