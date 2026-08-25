@@ -1418,7 +1418,7 @@ const handleDeleteProduct = (id: string) => {
                       onClick={handleInstallApp}
                       className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2"
                     >
-                      <Download size={14} /> Install PEDDLR Application
+                      <Download size={14} /> Install IÑAKI POS Application
                     </button>
                   </div>
                 )}
