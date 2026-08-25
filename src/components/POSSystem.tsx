@@ -162,6 +162,14 @@ useEffect(() => {
   }
 }, []);
 
+
+// Automatically launch Camera Scanner when navigating to POS if Scanner Setting is set to 'camera'
+useEffect(() => {
+  if (activeTab === 'pos' && posScanMethod === 'camera') {
+    setIsPosCameraOpen(true);
+  }
+}, [activeTab, posScanMethod]);
+
 // Handler to update state and save preference to LocalStorage
 const handleScanMethodChange = (method: ScanMethod) => {
   setPosScanMethod(method);
@@ -1073,13 +1081,18 @@ const handleDeleteProduct = (id: string) => {
                 </button>
               )}
             </div>
-
+            {/* Camera Scan Trigger Button */}
             <button
+              type="button"
               onClick={() => setIsPosCameraOpen(true)}
-              className="px-3.5 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0"
+              className={`px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 transition rounded-xl border shrink-0 ${
+                posScanMethod === 'camera'
+                  ? 'bg-fuchsia-600 text-white border-fuchsia-500 shadow-md shadow-fuchsia-600/30'
+                  : 'bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border-fuchsia-500/30'
+              }`}
             >
               <Camera size={16} />
-              <span className="hidden sm:inline landscape:inline">Camera Scan</span>
+              <span>Camera Scan</span>
             </button>
           </div>
         </div>
@@ -2263,27 +2276,28 @@ const handleDeleteProduct = (id: string) => {
         </div>
       )}
 
-          <CameraScanner
-            isOpen={isPosCameraOpen}
-            onClose={() => setIsPosCameraOpen(false)}
-            onScan={(scannedBarcode) => {
-              playScanBeep();
+          {/* Camera Scanner Modal Component */}
+            <CameraScanner
+              isOpen={isPosCameraOpen}
+              onClose={() => setIsPosCameraOpen(false)}
+              onScan={(scannedBarcode) => {
+                const cleanCode = String(scannedBarcode).trim();
+                const foundProduct = products.find(
+                  (p) =>
+                    String(p.barcode || '').trim() === cleanCode ||
+                    String(p.id || '').trim() === cleanCode
+                );
 
-              const cleanCode = String(scannedBarcode).trim();
-              const foundProduct = products.find(
-                (product) =>
-                  String(product.barcode || '').trim() === cleanCode ||
-                  String(product.id || '').trim() === cleanCode
-              );
+                if (foundProduct) {
+                  addToCart(foundProduct);
+                } else {
+                  setSearchQuery(cleanCode);
+                  alert(`No product found with barcode: ${cleanCode}`);
+                }
 
-              if (foundProduct) {
-                addToCart(foundProduct);
-              } else {
-                setSearchQuery(cleanCode);
-                alert(`No product found with barcode: ${cleanCode}`);
-              }
-            }}
-          />
+                setIsPosCameraOpen(false);
+              }}
+            />
 
       {/* Export Report Modal */}
       {isExportModalOpen && (
