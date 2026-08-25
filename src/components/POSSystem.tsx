@@ -1,488 +1,472 @@
-'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { createClient } from '@supabase/supabase-js';
 import {
-  ShoppingCart,
-  Package,
-  BarChart3,
-  BookOpen,
-  Sliders,
-  Search,
-  Plus,
-  Minus,
-  Trash2,
-  Camera,
-  X,
-  Mail,
-  Download,
-  Sun,
-  Moon,
-  RefreshCw,
-  Printer,
-  Wifi,
-  CreditCard,
-  Edit,
-  Bluetooth,
-  Unlock
+  ShoppingCart, Package, BarChart3, BookOpen, Settings,
+  Camera, Plus, Trash2, Edit3, Printer, Bluetooth, X, Mail,
+  Search, RefreshCw, CheckCircle, Clock, DollarSign, UserCheck,
+  AlertCircle, Download, Volume2, VolumeX, Pause, Play, ChevronRight,
+  Filter, Tag, ArrowUpRight, ArrowDownRight, UserPlus, FileSpreadsheet
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
-// --- SUPABASE CLIENT INITIALIZATION ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// ==========================================
+// 1. SUPABASE CLIENT & INITIAL CONSTANTS
+// ==========================================
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || 'https://your-supabase-url.supabase.co';
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || 'your-anon-key';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// --- TYPES & INTERFACES ---
-export type ScanMethod = 'hardware' | 'camera' | 'manual';
-
-export interface Product {
-  id: string;
-  name: string;
-  barcode?: string;
-  category?: string;
-  costPrice?: number;
-  price: number;
-  stock: number;
-}
-
-export interface CartItem extends Product {
-  quantity: number;
-}
-
-export interface LedgerEntry {
-  id: string;
-  customerName: string;
-  phone: string;
-  description: string;
-  amount: number;
-  status: 'unpaid' | 'paid';
-}
-
-export interface ReceiptData {
-  id: string;
-  timestamp: string;
-  items: CartItem[];
-  subtotal: number;
-  discount: number;
-  serviceFee: number;
-  deliveryFee: number;
-  netSales: number;
-  paymentMethod: string;
-  cashReceived?: number;
-  changeDue?: number;
-  gcashRefNumber?: string;
-  customer?: {
-    name?: string;
-    phone?: string;
-    address?: string;
-    notes?: string;
-  };
-}
-
-// --- ESC/POS BUFFER BUILDER WITH CASHBOX TRIGGER ---
-const buildEscPosReceiptBuffer = (receipt: ReceiptData, triggerCashbox: boolean = true): Uint8Array => {
-  const encoder = new TextEncoder();
-  const chunks: Uint8Array[] = [];
-
-  const addBytes = (bytes: number[]) => chunks.push(new Uint8Array(bytes));
-  const addText = (text: string) => chunks.push(encoder.encode(text));
-
-  // 1. Reset / Initialize Printer (ESC @)
-  addBytes([0x1b, 0x40]);
-
-  // 2. Header (Centered, Bold)
-  addBytes([0x1b, 0x61, 0x01]); // Center
-  addBytes([0x1b, 0x45, 0x01]); // Bold ON
-  addText("INAKI STORE\n");
-  addBytes([0x1b, 0x45, 0x00]); // Bold OFF
-  addText(`${new Date(receipt.timestamp).toLocaleString('en-PH')}\n`);
-  addText(`Receipt #: ${receipt.id}\n`);
-  addText("--------------------------------\n");
-
-  // 3. Item List (Left Aligned)
-  addBytes([0x1b, 0x61, 0x00]); // Left
-  receipt.items.forEach((item) => {
-    addText(`${item.name}\n`);
-    const line = `  ${item.quantity} x P${item.price.toFixed(2)}`.padEnd(22) + `P${(item.price * item.quantity).toFixed(2)}\n`;
-    addText(line);
-  });
-  addText("--------------------------------\n");
-
-  // 4. Totals & Payment Info
-  addBytes([0x1b, 0x45, 0x01]);
-  addText(`NET TOTAL: P${receipt.netSales.toFixed(2)}\n`);
-  addBytes([0x1b, 0x45, 0x00]);
-  addText(`Payment Method: ${receipt.paymentMethod.toUpperCase()}\n`);
-  if (receipt.gcashRefNumber) {
-    addText(`GCash Ref: ${receipt.gcashRefNumber}\n`);
-  }
-  if (receipt.paymentMethod === 'cash' && receipt.cashReceived) {
-    addText(`Cash Tendered: P${receipt.cashReceived.toFixed(2)}\n`);
-    addText(`Change Due: P${(receipt.changeDue || 0).toFixed(2)}\n`);
-  }
-
-  // 5. Footer
-  addBytes([0x1b, 0x61, 0x01]); // Center
-  addText("\nMaraming Salamat Po!\nPlease Come Again\n\n\n");
-
-  // 6. Cash Drawer Kick Command (ESC p m t1 t2) -> Pin 2 Pulse
-  if (triggerCashbox) {
-    addBytes([0x1b, 0x70, 0x00, 0x19, 0xfa]);
-  }
-
-  // 7. Paper Cut Command (GS V 0)
-  addBytes([0x1d, 0x56, 0x00]);
-
-  // Merge into single array
-  const totalBytes = chunks.reduce((acc, curr) => acc + curr.length, 0);
-  const result = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result;
+const DEFAULT_SETTINGS = {
+  storeName: 'IÑAKI STORE',
+  storeAddress: '123 Barangay Street, Manila, Philippines',
+  contactNumber: '+63 912 345 6789',
+  receiptFooter: 'Maraming Salamat Po!\nPlease Come Again',
+  paperWidth: '58mm', // '58mm' or '80mm'
+  soundEnabled: true,
+  autoPulseDrawer: true
 };
 
-// --- ENHANCED HIGH-ACCURACY CAMERA SCANNER ---
-interface CameraScannerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onScan: (barcode: string) => void;
-}
+// ==========================================
+// 2. AUDIO SYNTHESIZER UTILITY (Web Audio API)
+// ==========================================
+const playAudioFeedback = (type, enabled = true) => {
+  if (!enabled) return;
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
 
-export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, onScan }) => {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const animFrameRef = useRef<number | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [manualCode, setManualCode] = useState('');
-  const isProcessingRef = useRef(false);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === 'beep') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1046.50, ctx.currentTime); // C6
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.1);
+    } else if (type === 'success') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08); // E5
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.16); // G5
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } else if (type === 'error') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, ctx.currentTime);
+      osc.frequency.setValueAtTime(180, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.25);
+    }
+  } catch (e) {
+    console.warn('Audio synthesis failed:', e);
+  }
+};
+
+// ==========================================
+// 3. CSV EXPORT UTILITY
+// ==========================================
+const exportToCSV = (data, filename) => {
+  if (!data || !data.length) {
+    alert('No data available to export.');
+    return;
+  }
+  const headers = Object.keys(data[0]);
+  const csvRows = [];
+  csvRows.push(headers.join(','));
+
+  for (const row of data) {
+    const values = headers.map(header => {
+      const val = row[header];
+      const escaped = ('' + (val ?? '')).replace(/"/g, '\\"');
+      return `"${escaped}"`;
+    });
+    csvRows.push(values.join(','));
+  }
+
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `${filename}_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+// ==========================================
+// 4. THERMAL RECEIPT & HARDWARE BUFFER BUILDER
+// ==========================================
+const buildThermalReceiptBuffer = (data, settings = DEFAULT_SETTINGS) => {
+  const encoder = new TextEncoder();
+  const parts = [];
+
+  const lineCharLength = settings.paperWidth === '80mm' ? 48 : 32;
+  const separator = '-'.repeat(lineCharLength) + '\n';
+
+  const formatLine = (left, right) => {
+    const spaceCount = lineCharLength - (left.length + right.length);
+    if (spaceCount < 1) {
+      return left.substring(0, lineCharLength - right.length - 1) + ' ' + right + '\n';
+    }
+    return left + ' '.repeat(spaceCount) + right + '\n';
+  };
+
+  // Initialize & Center Align
+  parts.push(new Uint8Array([0x1B, 0x40])); // Reset ESC @
+  parts.push(new Uint8Array([0x1B, 0x61, 0x01])); // ESC a 1 (Center)
+
+  // Header Title
+  parts.push(new Uint8Array([0x1B, 0x21, 0x30])); // Double height + width
+  parts.push(encoder.encode(`${settings.storeName}\n`));
+  parts.push(new Uint8Array([0x1B, 0x21, 0x00])); // Normal size
+  
+  if (settings.storeAddress) parts.push(encoder.encode(`${settings.storeAddress}\n`));
+  if (settings.contactNumber) parts.push(encoder.encode(`Tel: ${settings.contactNumber}\n`));
+  parts.push(encoder.encode(`${new Date(data.timestamp || data.created_at).toLocaleString('en-PH')}\n`));
+  parts.push(encoder.encode(`Receipt #: ${data.id}\n`));
+  parts.push(encoder.encode(separator));
+
+  // Align Left for Itemized List
+  parts.push(new Uint8Array([0x1B, 0x61, 0x00]));
+  data.items.forEach((item) => {
+    const itemName = item.name.length > lineCharLength ? item.name.substring(0, lineCharLength) : item.name;
+    parts.push(encoder.encode(`${itemName}\n`));
+    const qtyPrice = `  ${item.quantity} x P${Number(item.price).toFixed(2)}`;
+    const total = `P${(item.quantity * item.price).toFixed(2)}`;
+    parts.push(encoder.encode(formatLine(qtyPrice, total)));
+  });
+
+  parts.push(encoder.encode(separator));
+
+  // Financial Breakdown
+  parts.push(encoder.encode(formatLine('Subtotal:', `P${Number(data.subtotal || data.netSales).toFixed(2)}`)));
+  if (data.discount > 0) parts.push(encoder.encode(formatLine('Discount:', `-P${Number(data.discount).toFixed(2)}`)));
+  if (data.extraFee > 0) parts.push(encoder.encode(formatLine('Extra Fee:', `P${Number(data.extraFee).toFixed(2)}`)));
+  if (data.deliveryFee > 0) parts.push(encoder.encode(formatLine('Delivery Fee:', `P${Number(data.deliveryFee).toFixed(2)}`)));
+  
+  parts.push(encoder.encode(separator));
+  
+  // Emphasized Net Total
+  parts.push(new Uint8Array([0x1B, 0x21, 0x20])); // Bold text
+  parts.push(encoder.encode(formatLine('NET TOTAL:', `P${Number(data.netSales).toFixed(2)}`)));
+  parts.push(new Uint8Array([0x1B, 0x21, 0x00])); // Normal text
+
+  // Payment Particulars
+  parts.push(encoder.encode(formatLine('Payment Method:', String(data.paymentMethod).toUpperCase())));
+  if (data.paymentMethod === 'cash') {
+    parts.push(encoder.encode(formatLine('Cash Tendered:', `P${Number(data.cashTendered || 0).toFixed(2)}`)));
+    parts.push(encoder.encode(formatLine('Change:', `P${Number(data.change || 0).toFixed(2)}`)));
+  } else if (data.gcashRefNumber) {
+    parts.push(encoder.encode(formatLine('GCash Ref #:', String(data.gcashRefNumber))));
+  }
+
+  parts.push(encoder.encode(separator));
+
+  // Footer Alignment Center
+  parts.push(new Uint8Array([0x1B, 0x61, 0x01]));
+  parts.push(encoder.encode(`${settings.receiptFooter}\n\n\n`));
+
+  // Hardware Trigger: Cash Drawer Pulse (Pin 2 / Pin 5)
+  if (settings.autoPulseDrawer) {
+    parts.push(new Uint8Array([0x1B, 0x70, 0x00, 0x19, 0xFA]));
+  }
+
+  // Paper Cut (GS V 0)
+  parts.push(new Uint8Array([0x1D, 0x56, 0x00]));
+
+  // Binary Output Assembly
+  const totalLength = parts.reduce((acc, p) => acc + p.length, 0);
+  const combinedBuffer = new Uint8Array(totalLength);
+  let offset = 0;
+  parts.forEach((p) => {
+    combinedBuffer.set(p, offset);
+    offset += p.length;
+  });
+
+  return combinedBuffer;
+};
+
+// ==========================================
+// 5. CAMERA SCANNER COMPONENT MODAL
+// ==========================================
+function CameraScanner({ isOpen, onClose, onScan, soundEnabled }) {
+  const videoRef = useRef(null);
+  const [inputCode, setInputCode] = useState('');
+  const [cameraError, setCameraError] = useState(null);
 
   useEffect(() => {
-    if (!isOpen) {
-      stopCamera();
-      return;
-    }
-    startCamera();
-    return () => stopCamera();
-  }, [isOpen]);
-
-  const startCamera = async () => {
-    setCameraError(null);
-    try {
-      // Request high resolution and environment-facing camera
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
-        },
-      });
-
-      streamRef.current = stream;
-
-      // Apply continuous auto-focus hardware constraint if supported by device
-      const track = stream.getVideoTracks()[0];
-      if (track && 'applyConstraints' in track) {
-        const capabilities = (track.getCapabilities?.() || {}) as any;
-        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] } as any).catch(() => {});
-        }
-      }
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        startFrameDetection();
-      }
-    } catch (err: any) {
-      setCameraError('Camera access denied or high-res mode unavailable.');
-    }
-  };
-
-  const stopCamera = () => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-  };
-
-  const startFrameDetection = async () => {
-    if (!('BarcodeDetector' in window)) {
-      return;
-    }
-
-    try {
-      const barcodeDetector = new (window as any).BarcodeDetector({
-        formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'upc_a', 'upc_e', 'code_39'],
-      });
-
-      const processFrame = async () => {
-        if (!videoRef.current || !streamRef.current || isProcessingRef.current) {
-          animFrameRef.current = requestAnimationFrame(processFrame);
-          return;
-        }
-
-        isProcessingRef.current = true;
-
-        try {
-          // Offscreen Canvas frame contrast enhancement
-          const video = videoRef.current;
-          let targetInput: HTMLVideoElement | HTMLCanvasElement = video;
-
-          if (canvasRef.current && video.videoWidth > 0) {
-            const canvas = canvasRef.current;
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              // Contrast enhancement image filter
-              ctx.filter = 'contrast(140%) grayscale(100%)';
-              ctx.drawImage(canvas, 0, 0);
-              targetInput = canvas;
+    let stream = null;
+    if (isOpen) {
+      setCameraError(null);
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          .then((s) => {
+            stream = s;
+            if (videoRef.current) {
+              videoRef.current.srcObject = s;
             }
-          }
-
-          const barcodes = await barcodeDetector.detect(targetInput);
-          if (barcodes.length > 0 && barcodes[0].rawValue) {
-            if ('vibrate' in navigator) navigator.vibrate(100);
-            onScan(barcodes[0].rawValue);
-            stopCamera();
-            return;
-          }
-        } catch (e) {
-          // Frame pass
-        } finally {
-          isProcessingRef.current = false;
-          animFrameRef.current = requestAnimationFrame(processFrame);
-        }
-      };
-
-      animFrameRef.current = requestAnimationFrame(processFrame);
-    } catch (e) {
-      console.warn('Native BarcodeDetector initialization error:', e);
+          })
+          .catch((err) => {
+            console.error('Camera stream access failed:', err);
+            setCameraError('Camera access denied or unavailable.');
+          });
+      } else {
+        setCameraError('MediaDevices API not supported on this device.');
+      }
     }
-  };
+    return () => {
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
-      <canvas ref={canvasRef} className="hidden" />
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4 relative">
-        <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+  const handleManualSubmit = (e) => {
+    e.preventDefault();
+    if (inputCode.trim()) {
+      playAudioFeedback('beep', soundEnabled);
+      onScan(inputCode.trim());
+      setInputCode('');
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <Camera size={18} className="text-fuchsia-400" />
-            <h3 className="font-bold text-sm text-slate-100">Scan Barcode (Auto-Focus)</h3>
+            <h3 className="font-bold text-white text-sm">Scan Barcode ID</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-xl hover:bg-slate-800 transition">
             <X size={18} />
           </button>
         </div>
 
-        <div className="relative aspect-square w-full bg-black rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center">
+        <div className="relative bg-black rounded-2xl overflow-hidden aspect-video flex items-center justify-center border border-slate-800">
           {cameraError ? (
-            <div className="p-4 text-center space-y-2">
-              <p className="text-xs text-rose-400">{cameraError}</p>
-              <button
-                onClick={startCamera}
-                className="bg-slate-800 text-slate-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 mx-auto"
-              >
-                <RefreshCw size={12} /> Retry Camera
-              </button>
+            <div className="text-center p-4 space-y-2">
+              <AlertCircle size={28} className="text-amber-500 mx-auto" />
+              <p className="text-xs text-slate-400">{cameraError}</p>
             </div>
           ) : (
             <>
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-              <div className="absolute inset-x-6 top-1/2 h-0.5 bg-rose-500 shadow-[0_0_10px_#f43f5e] animate-pulse" />
-              <div className="absolute inset-8 border-2 border-fuchsia-500/60 rounded-2xl pointer-events-none shadow-[inset_0_0_15px_rgba(217,70,239,0.3)]" />
+              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+              <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 h-0.5 bg-fuchsia-500 shadow-[0_0_12px_#d946ef] animate-pulse" />
             </>
           )}
         </div>
 
-        <div className="space-y-2 pt-2 border-t border-slate-800">
-          <label className="text-[11px] text-slate-400 block">Or key barcode manually:</label>
+        <form onSubmit={handleManualSubmit} className="space-y-2">
+          <label className="text-xs text-slate-400 block font-semibold">Manual Input / Barcode Gun</label>
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Barcode digits..."
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+              autoFocus
+              value={inputCode}
+              onChange={(e) => setInputCode(e.target.value)}
+              placeholder="Type code and hit enter..."
+              className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-fuchsia-500"
             />
-            <button
-              onClick={() => {
-                if (manualCode.trim()) onScan(manualCode.trim());
-              }}
-              className="bg-fuchsia-600 text-white font-bold px-3 py-2 rounded-xl text-xs"
-            >
+            <button type="submit" className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold px-4 rounded-xl transition shadow-md shadow-fuchsia-600/30">
               Submit
             </button>
           </div>
-        </div>
+        </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
-};
+}
 
-// --- MAIN POS SYSTEM COMPONENT ---
-export default function POSSystem() {
-  const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'analytics' | 'ledger' | 'settings'>('pos');
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+// ==========================================
+// 6. NEW UTANG ENTRY MODAL COMPONENT
+// ==========================================
+function AddUtangModal({ isOpen, onClose, onSave, cartItems, subtotal }) {
+  const [customerName, setCustomerName] = useState('');
+  const [contactNumber, setContactNumber] = useState('');
+  const [notes, setNotes] = useState('');
 
-  // Supabase Data States
-  const [products, setProducts] = useState<Product[]>([]);
-  const [transactions, setTransactions] = useState<ReceiptData[]>([]);
-  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
-  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  if (!isOpen) return null;
 
-  // Cart & POS State
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!customerName.trim()) return;
+    onSave({
+      customerName: customerName.trim(),
+      contactNumber: contactNumber.trim(),
+      notes: notes.trim(),
+      amount: subtotal,
+      items: cartItems,
+      status: 'utang',
+      created_at: new Date().toISOString()
+    });
+    setCustomerName('');
+    setContactNumber('');
+    setNotes('');
+    onClose();
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <BookOpen size={18} className="text-amber-400" />
+            <h3 className="font-bold text-white text-sm">Record Credit (Utang) Transaction</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-400 font-semibold block mb-1">Customer Name *</label>
+            <input
+              required
+              type="text"
+              placeholder="e.g. Aling Nena"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-400 font-semibold block mb-1">Contact Number (Optional)</label>
+            <input
+              type="text"
+              placeholder="09123456789"
+              value={contactNumber}
+              onChange={(e) => setContactNumber(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-400 font-semibold block mb-1">Notes / Terms</label>
+            <textarea
+              rows={2}
+              placeholder="e.g. Promise to pay next Friday..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500 resize-none"
+            />
+          </div>
+
+          <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 flex justify-between items-center">
+            <span className="text-xs text-slate-400 font-semibold">Total Credit Amount:</span>
+            <span className="font-mono text-amber-400 font-extrabold text-base">₱{subtotal.toFixed(2)}</span>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-2xl text-xs uppercase tracking-wider transition shadow-lg shadow-amber-600/30"
+          >
+            Save to Utang Ledger
+          </button>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ==========================================
+// 7. MAIN INAKI POS APPLICATION
+// ==========================================
+export default function InakiPOS() {
+  // App Navigation & Configuration
+  const [activeTab, setActiveTab] = useState('pos');
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+
+  // Data Collections
+  const [products, setProducts] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [heldCarts, setHeldCarts] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [utangLedger, setUtangLedger] = useState([]);
+
+  // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [posScanMethod, setPosScanMethod] = useState<ScanMethod>('hardware');
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [utangFilter, setUtangFilter] = useState('all');
+  const [analyticsRange, setAnalyticsRange] = useState('all');
 
-  // Payment & Financial Calculations
-  const [discount, setDiscount] = useState<number>(0);
-  const [extraFee, setExtraFee] = useState<number>(0);
-  const [deliveryFee, setDeliveryFee] = useState<number>(0);
-  const [cashTendered, setCashTendered] = useState<number>(0);
-  const [gcashRefNumber, setGcashRefNumber] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash'>('cash');
-  const [customer, setCustomer] = useState<{ name?: string; phone?: string; address?: string; notes?: string }>({});
+  // Transaction Inputs
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [cashTendered, setCashTendered] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [extraFee, setExtraFee] = useState(0);
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [gcashRefNumber, setGcashRefNumber] = useState('');
 
-  // Modals & Controls
+  // Modal Views
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isUtangModalOpen, setIsUtangModalOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [productForm, setProductForm] = useState({ name: '', category: 'General', barcode: '', costPrice: 0, price: 0, stock: 0 });
+
+  // Camera & Export Modals
   const [isPosCameraOpen, setIsPosCameraOpen] = useState(false);
   const [isProductCameraOpen, setIsProductCameraOpen] = useState(false);
-  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-
-  // Bluetooth Printer State
-  const [isPrinting, setIsPrinting] = useState(false);
-  const [btStatus, setBtStatus] = useState<string>('');
-
-  // Product Modal State
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [productForm, setProductForm] = useState({
-    name: '',
-    barcode: '',
-    category: 'General',
-    costPrice: 0,
-    price: 0,
-    stock: 0,
-  });
-
-  // Export Analytics State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [exportTab, setExportTab] = useState<'sales' | 'movement' | 'capital'>('sales');
-  const [exportEmail, setExportEmail] = useState('manager@inaki-store.ph');
+  const [exportTab, setExportTab] = useState('sales');
+  const [exportEmail, setExportEmail] = useState('admin@inakistore.ph');
 
-  // Ledger State
-  const [ledgerFilter, setLedgerFilter] = useState<'all' | 'utang' | 'paid'>('all');
-  const [ledger, setLedger] = useState<LedgerEntry[]>([
-    { id: 'l1', customerName: 'Juan Dela Cruz', phone: '09171234567', description: '2x SM Light, 1x Chips', amount: 155, status: 'unpaid' },
-    { id: 'l2', customerName: 'Maria Santos', phone: '09189876543', description: 'Grocery items', amount: 320, status: 'paid' },
-  ]);
+  // Hardware Status
+  const [btStatus, setBtStatus] = useState('');
+  const [isPrinting, setIsPrinting] = useState(false);
 
-  // Fetch Supabase data on mount
+  // --- INITIAL SUPABASE FETCH & LISTENERS ---
   useEffect(() => {
     fetchProducts();
     fetchTransactions();
+    fetchUtangLedger();
   }, []);
 
-  // Fetch Products from `products` table
   const fetchProducts = async () => {
-    setIsLoadingProducts(true);
-    try {
-      const { data, error } = await supabase.from('products').select('*').order('name');
-      if (error) {
-        console.error('Error fetching products:', error);
-      } else if (data) {
-        setProducts(
-          data.map((p) => ({
-            id: p.id,
-            name: p.name,
-            barcode: p.barcode || '',
-            category: 'General',
-            costPrice: Number(p.cost || 0),
-            price: Number(p.price || 0),
-            stock: Number(p.stock || 0),
-          }))
-        );
-      }
-    } catch (err) {
-      console.error('Database connection error:', err);
-    } finally {
-      setIsLoadingProducts(false);
-    }
+    const { data, error } = await supabase.from('products').select('*').order('name');
+    if (!error && data) setProducts(data);
   };
 
-  // Fetch Transactions from `transactions` table
   const fetchTransactions = async () => {
-    setIsLoadingTransactions(true);
-    try {
-      const { data, error } = await supabase.from('transactions').select('*').order('timestamp', { ascending: false });
-      if (error) {
-        console.error('Error fetching transactions:', error);
-      } else if (data) {
-        const mappedData: ReceiptData[] = data.map((t: any) => ({
-          id: t.id,
-          timestamp: t.timestamp,
-          items: t.items || [],
-          subtotal: Number(t.subtotal || 0),
-          discount: Number(t.discount || 0),
-          serviceFee: Number(t.servicefee || 0),
-          deliveryFee: Number(t.deliveryfee || 0),
-          netSales: Number(t.netsales || 0),
-          paymentMethod: t.paymentmethod,
-          cashReceived: Number(t.cashreceived || 0),
-          changeDue: Number(t.changedue || 0),
-          gcashRefNumber: t.gcashrefnumber || '',
-          customer: t.customer,
-        }));
-        setTransactions(mappedData);
-      }
-    } catch (err) {
-      console.error('Error syncing transactions:', err);
-    } finally {
-      setIsLoadingTransactions(false);
-    }
+    const { data, error } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    if (!error && data) setTransactions(data);
   };
 
-  // Financial Calculations
-  const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const netTotal = Math.max(0, subtotal - discount + extraFee + deliveryFee);
+  const fetchUtangLedger = async () => {
+    const { data, error } = await supabase.from('utang_ledger').select('*').order('created_at', { ascending: false });
+    if (!error && data) setUtangLedger(data);
+  };
 
-  // Analytics Dynamic Calculations
-  const totalSales = transactions.reduce((acc, t) => acc + t.netSales, 0);
-  const gcashTransactions = transactions.filter((t) => t.paymentMethod === 'gcash');
-  const gcashTotalSales = gcashTransactions.reduce((acc, t) => acc + t.netSales, 0);
-  const gcashCount = gcashTransactions.length;
-  const estimatedProfit = transactions.reduce((acc, t) => {
-    const totalCost = t.items.reduce((cAcc, item) => cAcc + (item.costPrice || 0) * item.quantity, 0);
-    return acc + (t.netSales - totalCost);
-  }, 0);
-
-  // Cart Handlers
-  const addToCart = (product: Product) => {
+  // --- CART OPERATIONS ---
+  const addToCart = (product) => {
+    playAudioFeedback('beep', settings.soundEnabled);
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        return prev.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+        return prev.map((item) =>
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
       }
       return [...prev, { ...product, quantity: 1 }];
     });
   };
 
-  const updateQuantity = (id: string, delta: number) => {
+  const updateCartQty = (id, delta) => {
+    playAudioFeedback('beep', settings.soundEnabled);
     setCart((prev) =>
       prev
         .map((item) => {
@@ -492,481 +476,487 @@ export default function POSSystem() {
           }
           return item;
         })
-        .filter(Boolean) as CartItem[]
+        .filter(Boolean)
     );
   };
 
-  const removeFromCart = (id: string) => {
+  const removeFromCart = (id) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  // Product Database Actions (Supabase)
-  const handleOpenAddProduct = () => {
-    setEditingProduct(null);
-    setProductForm({ name: '', barcode: '', category: 'General', costPrice: 0, price: 0, stock: 0 });
-    setIsProductModalOpen(true);
+  const clearCart = () => setCart([]);
+
+  // --- ORDER PARKING (HELD CARTS) ---
+  const holdCurrentCart = () => {
+    if (cart.length === 0) return;
+    const heldOrder = {
+      id: `HOLD-${Date.now().toString().slice(-4)}`,
+      timestamp: new Date().toISOString(),
+      items: cart
+    };
+    setHeldCarts((prev) => [...prev, heldOrder]);
+    clearCart();
+    playAudioFeedback('success', settings.soundEnabled);
   };
 
-  const handleOpenEditProduct = (prod: Product) => {
-    setEditingProduct(prod);
-    setProductForm({
-      name: prod.name,
-      barcode: prod.barcode || '',
-      category: prod.category || 'General',
-      costPrice: prod.costPrice || 0,
-      price: prod.price,
-      stock: prod.stock,
+  const restoreHeldCart = (heldId) => {
+    const orderToRestore = heldCarts.find((h) => h.id === heldId);
+    if (orderToRestore) {
+      setCart(orderToRestore.items);
+      setHeldCarts((prev) => prev.filter((h) => h.id !== heldId));
+      playAudioFeedback('beep', settings.soundEnabled);
+    }
+  };
+
+  // --- CALCULATIONS & MEMOIZED LISTS ---
+  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
+  const netTotal = useMemo(() => Math.max(0, subtotal - discount + Number(extraFee) + Number(deliveryFee)), [subtotal, discount, extraFee, deliveryFee]);
+
+  const categories = useMemo(() => {
+    const set = new Set(products.map((p) => p.category || 'General'));
+    return ['all', ...Array.from(set)];
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return products.filter((p) => {
+      const matchesSearch = p.name.toLowerCase().includes(q) || String(p.barcode || '').includes(q);
+      const matchesCategory = selectedCategory === 'all' || (p.category || 'General') === selectedCategory;
+      return matchesSearch && matchesCategory;
     });
-    setIsProductModalOpen(true);
-  };
+  }, [products, searchQuery, selectedCategory]);
 
-  const handleSaveProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingProduct) {
-      const { error } = await supabase
-        .from('products')
-        .update({
-          name: productForm.name,
-          barcode: productForm.barcode,
-          price: productForm.price,
-          cost: productForm.costPrice,
-          stock: productForm.stock,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingProduct.id);
+  const filteredInventory = useMemo(() => {
+    const q = inventorySearch.toLowerCase().trim();
+    if (!q) return products;
+    return products.filter((p) => p.name.toLowerCase().includes(q) || String(p.barcode || '').includes(q));
+  }, [products, inventorySearch]);
 
-      if (error) {
-        alert('Failed to update product in database.');
-      } else {
-        fetchProducts();
-      }
-    } else {
-      const { error } = await supabase.from('products').insert([
-        {
-          name: productForm.name,
-          barcode: productForm.barcode,
-          price: productForm.price,
-          cost: productForm.costPrice,
-          stock: productForm.stock,
-        },
-      ]);
-
-      if (error) {
-        alert('Failed to add product to database.');
-      } else {
-        fetchProducts();
-      }
+  const filteredTransactions = useMemo(() => {
+    if (analyticsRange === 'today') {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      return transactions.filter((t) => t.created_at && t.created_at.startsWith(todayStr));
     }
-    setIsProductModalOpen(false);
-  };
+    return transactions;
+  }, [transactions, analyticsRange]);
 
-  const handleDeleteProduct = async (id: string) => {
-    if (confirm('Are you sure you want to delete this product?')) {
-      const { error } = await supabase.from('products').delete().eq('id', id);
-      if (error) {
-        alert('Failed to delete product.');
-      } else {
-        fetchProducts();
-      }
-    }
-  };
+  const totalRevenue = useMemo(() => filteredTransactions.reduce((acc, t) => acc + Number(t.netSales || 0), 0), [filteredTransactions]);
+  const totalGCash = useMemo(() => filteredTransactions.filter((t) => t.paymentMethod === 'gcash').reduce((acc, t) => acc + Number(t.netSales || 0), 0), [filteredTransactions]);
+  const totalCash = useMemo(() => filteredTransactions.filter((t) => t.paymentMethod === 'cash').reduce((acc, t) => acc + Number(t.netSales || 0), 0), [filteredTransactions]);
+  const estimatedProfit = useMemo(() => filteredTransactions.reduce((acc, t) => acc + (Number(t.netSales || 0) - Number(t.totalCost || 0)), 0), [filteredTransactions]);
 
-  // Direct Bluetooth ESC/POS Print & Cashbox Trigger Handler
-  const handleBluetoothPrint = async (receipt: ReceiptData) => {
-    if (!('bluetooth' in navigator)) {
-      alert('Web Bluetooth API is not supported in this browser/device.');
-      return;
-    }
-
-    setIsPrinting(true);
-    setBtStatus('Searching for printer...');
-
-    try {
-      // Standard ESC/POS printer Bluetooth service UUIDs
-      const device = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [
-          '000018f0-0000-1000-8000-00805f9b34fb', // Standard Thermal Printer Service
-          '0000af00-0000-1000-8000-00805f9b34fb',
-          'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-        ],
-      });
-
-      setBtStatus('Connecting to printer...');
-      const server = await device.gatt.connect();
-
-      // Locate writable characteristic
-      const services = await server.getPrimaryServices();
-      let writeCharacteristic: any = null;
-
-      for (const service of services) {
-        const characteristics = await service.getCharacteristics();
-        for (const char of characteristics) {
-          if (char.properties.write || char.properties.writeWithoutResponse) {
-            writeCharacteristic = char;
-            break;
-          }
-        }
-        if (writeCharacteristic) break;
-      }
-
-      if (!writeCharacteristic) {
-        throw new Error('No writable characteristic found on printer.');
-      }
-
-      setBtStatus('Printing & kicking cashbox...');
-      const buffer = buildEscPosReceiptBuffer(receipt, true);
-
-      // Write in chunks to prevent Bluetooth buffer overflow
-      const chunkSize = 100;
-      for (let i = 0; i < buffer.length; i += chunkSize) {
-        const chunk = buffer.slice(i, i + chunkSize);
-        if (writeCharacteristic.properties.writeWithoutResponse) {
-          await writeCharacteristic.writeValueWithoutResponse(chunk);
-        } else {
-          await writeCharacteristic.writeValue(chunk);
-        }
-      }
-
-      setBtStatus('Print successful! Cashbox unlocked.');
-      setTimeout(() => {
-        setBtStatus('');
-        setIsPrinting(false);
-      }, 2000);
-    } catch (err: any) {
-      console.error('Bluetooth Print Error:', err);
-      setBtStatus('');
-      setIsPrinting(false);
-      alert(`Bluetooth print failed: ${err.message || err}`);
-    }
-  };
-
-  // Direct Cashbox Open Trigger (Standalone)
-  const handleKickCashbox = async () => {
-    if (!('bluetooth' in navigator)) {
-      alert('Web Bluetooth API is not supported.');
-      return;
-    }
-
-    try {
-      const device = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'],
-      });
-      const server = await device.gatt.connect();
-      const services = await server.getPrimaryServices();
-      let writeChar: any = null;
-
-      for (const service of services) {
-        const chars = await service.getCharacteristics();
-        for (const c of chars) {
-          if (c.properties.write || c.properties.writeWithoutResponse) {
-            writeChar = c;
-            break;
-          }
-        }
-        if (writeChar) break;
-      }
-
-      if (writeChar) {
-        // Pulse cashbox command: ESC p 0 25 250
-        const pulse = new Uint8Array([0x1b, 0x70, 0x00, 0x19, 0xfa]);
-        await writeChar.writeValue(pulse);
-        alert('Cashbox pulse command sent!');
-      }
-    } catch (e: any) {
-      alert(`Cashbox trigger error: ${e.message}`);
-    }
-  };
-
-  // Complete & Persist Transaction
+  // --- CHECKOUT & TRANSACTION LOGIC ---
   const handleCompleteTransaction = async () => {
-    const trxId = `TRX-${Math.floor(10000 + Math.random() * 90000)}`;
-    const timestamp = new Date().toISOString();
+    if (cart.length === 0) return;
 
-    const receipt: ReceiptData = {
-      id: trxId,
-      timestamp,
-      items: [...cart],
+    const transactionId = `TX-${Date.now().toString().slice(-6)}`;
+    const calculatedTotalCost = cart.reduce((sum, item) => sum + (Number(item.costPrice) || 0) * item.quantity, 0);
+    const calculatedChange = paymentMethod === 'cash' ? Math.max(0, cashTendered - netTotal) : 0;
+
+    const newTxPayload = {
+      id: transactionId,
+      items: cart,
       subtotal,
-      discount,
-      serviceFee: extraFee,
-      deliveryFee,
+      discount: Number(discount),
+      extraFee: Number(extraFee),
+      deliveryFee: Number(deliveryFee),
       netSales: netTotal,
+      totalCost: calculatedTotalCost,
       paymentMethod,
-      cashReceived: paymentMethod === 'cash' ? cashTendered : undefined,
-      changeDue: paymentMethod === 'cash' ? Math.max(0, cashTendered - netTotal) : undefined,
-      gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : undefined,
-      customer,
+      cashTendered: paymentMethod === 'cash' ? Number(cashTendered) : 0,
+      change: calculatedChange,
+      gcashRefNumber: paymentMethod === 'gcash' ? gcashRefNumber : '',
+      created_at: new Date().toISOString()
     };
 
-    try {
-      // 1. Insert transaction into `transactions` table
-      const { error: trxError } = await supabase.from('transactions').insert([
-        {
-          id: trxId,
-          timestamp,
-          items: cart,
-          subtotal,
-          discount,
-          servicefee: extraFee,
-          deliveryfee: deliveryFee,
-          netsales: netTotal,
-          paymentmethod: paymentMethod,
-          cashreceived: paymentMethod === 'cash' ? cashTendered : null,
-          changedue: paymentMethod === 'cash' ? Math.max(0, cashTendered - netTotal) : null,
-          gcashrefnumber: paymentMethod === 'gcash' ? gcashRefNumber : null,
-          customer: customer.name ? customer : null,
-        },
-      ]);
-
-      if (trxError) console.error('Failed transaction insert:', trxError);
-
-      // 2. Insert into `sales` and `sale_items`
-      const { data: salesData } = await supabase
-        .from('sales')
-        .insert([
-          {
-            total_amount: netTotal,
-            payment_method: paymentMethod,
-            customer_name: customer.name || 'Walk-in Customer',
-            created_at: timestamp,
-          },
-        ])
-        .select();
-
-      if (salesData && salesData.length > 0) {
-        const saleId = salesData[0].id;
-        const saleItemsPayload = cart.map((item) => ({
-          sale_id: saleId,
-          product_id: item.id,
-          quantity: item.quantity,
-          unit_price: item.price,
-        }));
-        await supabase.from('sale_items').insert(saleItemsPayload);
-      }
-
-      // 3. Deduct Stock & Write to `inventory_ledger`
-      for (const item of cart) {
-        const newStock = Math.max(0, item.stock - item.quantity);
-        await supabase.from('products').update({ stock: newStock }).eq('id', item.id);
-
-        await supabase.from('inventory_ledger').insert([
-          {
-            product_id: item.id,
-            change_qty: -item.quantity,
-            reason: `POS Sale (${trxId})`,
-            created_at: timestamp,
-          },
-        ]);
-      }
-
-      fetchProducts();
-      fetchTransactions();
-    } catch (err) {
-      console.error('Supabase persistence error:', err);
+    // Save to Supabase
+    const { error: txError } = await supabase.from('transactions').insert([newTxPayload]);
+    if (txError) {
+      alert(`Transaction save failed: ${txError.message}`);
+      playAudioFeedback('error', settings.soundEnabled);
+      return;
     }
 
-    setReceiptData(receipt);
-    setCart([]);
+    // Deduct stock levels in Supabase
+    for (const item of cart) {
+      const newStock = Math.max(0, (item.stock || 0) - item.quantity);
+      await supabase.from('products').update({ stock: newStock }).eq('id', item.id);
+    }
+
+    playAudioFeedback('success', settings.soundEnabled);
+    setReceiptData(newTxPayload);
+    setIsPaymentModalOpen(false);
+    clearCart();
+    setCashTendered(0);
     setDiscount(0);
     setExtraFee(0);
     setDeliveryFee(0);
-    setCashTendered(0);
     setGcashRefNumber('');
-    setCustomer({});
-    setIsPaymentModalOpen(false);
+    fetchProducts();
+    fetchTransactions();
   };
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.barcode && p.barcode.includes(searchQuery))
-  );
+  // --- UTANG RECORD LOGIC ---
+  const handleSaveUtang = async (utangData) => {
+    const { error } = await supabase.from('utang_ledger').insert([utangData]);
+    if (error) {
+      alert(`Failed to log utang: ${error.message}`);
+      playAudioFeedback('error', settings.soundEnabled);
+      return;
+    }
+
+    // Deduct stock for utang items
+    for (const item of cart) {
+      const newStock = Math.max(0, (item.stock || 0) - item.quantity);
+      await supabase.from('products').update({ stock: newStock }).eq('id', item.id);
+    }
+
+    playAudioFeedback('success', settings.soundEnabled);
+    clearCart();
+    fetchProducts();
+    fetchUtangLedger();
+  };
+
+  // --- PRODUCT MANAGEMENT ---
+  const handleSaveProduct = async (e) => {
+    e.preventDefault();
+    if (editingProduct) {
+      const { error } = await supabase.from('products').update(productForm).eq('id', editingProduct.id);
+      if (error) alert(`Update failed: ${error.message}`);
+    } else {
+      const { error } = await supabase.from('products').insert([productForm]);
+      if (error) alert(`Insert failed: ${error.message}`);
+    }
+    setIsProductModalOpen(false);
+    setEditingProduct(null);
+    setProductForm({ name: '', category: 'General', barcode: '', costPrice: 0, price: 0, stock: 0 });
+    fetchProducts();
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (window.confirm('Delete this product permanently from database?')) {
+      await supabase.from('products').delete().eq('id', id);
+      fetchProducts();
+    }
+  };
+
+  // --- THERMAL BLUETOOTH PRINTING ---
+  const handleBluetoothPrint = async (receipt) => {
+    if (!navigator.bluetooth) {
+      alert('Web Bluetooth API not supported on this device/browser.');
+      return;
+    }
+
+    try {
+      setIsPrinting(true);
+      setBtStatus('Searching for printer...');
+
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', '00001101-0000-1000-8000-00805f9b34fb', 0xFF00]
+      });
+
+      setBtStatus('Connecting to GATT server...');
+      const server = await device.gatt.connect();
+      const services = await server.getPrimaryServices();
+
+      if (services.length === 0) throw new Error('No GATT services found.');
+
+      const characteristics = await services[0].getCharacteristics();
+      const writeChar = characteristics.find((c) => c.properties.write || c.properties.writeWithoutResponse);
+
+      if (!writeChar) throw new Error('No writeable characteristic found.');
+
+      setBtStatus('Sending printable buffer...');
+      const buffer = buildThermalReceiptBuffer(receipt, settings);
+      await writeChar.writeValue(buffer);
+
+      setBtStatus('Print Complete!');
+      playAudioFeedback('success', settings.soundEnabled);
+      setTimeout(() => setBtStatus(''), 3000);
+    } catch (err) {
+      console.error(err);
+      setBtStatus(`BT Error: ${err.message}`);
+      playAudioFeedback('error', settings.soundEnabled);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} flex flex-col font-sans`}>
-      {/* Top Header Navigation */}
-      <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col antialiased selection:bg-fuchsia-500 selection:text-white">
+      {/* --- HEADER NAVBAR --- */}
+      <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 px-4 py-3 flex items-center justify-between shadow-xl">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-fuchsia-600 flex items-center justify-center font-black text-white text-sm">I</div>
-          <h1 className="font-black text-lg tracking-wide text-white">IÑAKI <span className="text-fuchsia-500">POS</span></h1>
+          <div className="bg-gradient-to-tr from-fuchsia-600 to-indigo-600 w-10 h-10 rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-lg shadow-fuchsia-600/30">
+            I
+          </div>
+          <div>
+            <h1 className="font-extrabold text-white text-base tracking-wide leading-none">{settings.storeName}</h1>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Sari-Sari Store POS System</p>
+          </div>
         </div>
 
-        <nav className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+        {/* Navigation Tabs */}
+        <nav className="flex bg-slate-950 p-1 rounded-2xl border border-slate-800/80">
           {[
             { id: 'pos', label: 'POS', icon: ShoppingCart },
-            { id: 'inventory', label: 'Inventory', icon: Package },
-            { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-            { id: 'ledger', label: 'Utang Ledger', icon: BookOpen },
-            { id: 'settings', label: 'Settings', icon: Sliders },
+            { id: 'inventory', label: 'Stock', icon: Package },
+            { id: 'analytics', label: 'Sales', icon: BarChart3 },
+            { id: 'utang', label: 'Utang', icon: BookOpen },
+            { id: 'settings', label: 'Config', icon: Settings }
           ].map((tab) => {
             const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition ${
-                  activeTab === tab.id ? 'bg-fuchsia-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                  isActive
+                    ? 'bg-fuchsia-600 text-white shadow-md shadow-fuchsia-600/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                 }`}
               >
-                <Icon size={14} />
-                <span className="hidden sm:inline">{tab.label}</span>
+                <Icon size={15} />
+                <span className="hidden md:inline">{tab.label}</span>
               </button>
             );
           })}
         </nav>
       </header>
 
-      {/* Main View Area */}
-      <main className="flex-1 flex overflow-hidden">
-        {/* --- 1. POS TAB --- */}
+      {/* --- MAIN PAGE CONTENT --- */}
+      <main className="flex-1 p-4 max-w-7xl w-full mx-auto overflow-x-hidden">
+        {/* ==========================================
+            TAB 1: POS SYSTEM VIEW
+        ========================================== */}
         {activeTab === 'pos' && (
-          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-            <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto min-w-0">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left Product Catalog */}
+            <div className="lg:col-span-2 space-y-3">
+              {/* Search Bar & Barcode Scanner */}
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-3 text-slate-500" size={16} />
+                  <Search className="absolute left-3.5 top-3 text-slate-500" size={16} />
                   <input
                     type="text"
                     placeholder="Search product name or scan barcode..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-fuchsia-500"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-fuchsia-500 transition"
                   />
                 </div>
                 <button
                   onClick={() => setIsPosCameraOpen(true)}
-                  className="bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 px-3.5 rounded-xl flex items-center gap-1.5 text-xs font-bold hover:bg-fuchsia-600/30 transition"
+                  className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500 text-fuchsia-400 px-4 rounded-2xl flex items-center justify-center transition shadow-lg"
                 >
-                  <Camera size={16} /> Camera
+                  <Camera size={18} />
                 </button>
               </div>
 
-              {isLoadingProducts ? (
-                <div className="p-12 text-center text-slate-500 text-xs">Loading products from Supabase...</div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredProducts.map((product) => (
-                    <button
-                      key={product.id}
-                      onClick={() => addToCart(product)}
-                      className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 rounded-2xl p-3.5 text-left transition flex flex-col justify-between space-y-2 group"
-                    >
-                      <div>
-                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{product.barcode || 'NO BARCODE'}</p>
-                        <h3 className="font-bold text-xs text-slate-200 group-hover:text-fuchsia-400 transition line-clamp-2">{product.name}</h3>
-                      </div>
-                      <div className="flex justify-between items-end pt-2 border-t border-slate-800/60">
-                        <span className="font-mono font-bold text-sm text-amber-400">₱{product.price.toFixed(2)}</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 5 ? 'bg-slate-800 text-slate-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                          {product.stock} left
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Cart Panel */}
-            <div className="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col h-[50vh] lg:h-auto">
-              <div className="p-4 border-b border-slate-800 flex justify-between items-center">
-                <h2 className="font-bold text-sm text-slate-200 flex items-center gap-2">
-                  <ShoppingCart size={16} className="text-fuchsia-400" /> Current Cart
-                </h2>
-                <span className="bg-fuchsia-600/20 text-fuchsia-400 text-xs font-bold px-2 py-0.5 rounded-md">
-                  {cart.reduce((a, b) => a + b.quantity, 0)} Items
-                </span>
+              {/* Category Filter Pills */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-bold capitalize whitespace-nowrap transition ${
+                      selectedCategory === cat
+                        ? 'bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30'
+                        : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {/* Product Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {filteredProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    onClick={() => addToCart(product)}
+                    className="bg-slate-900 border border-slate-800/80 hover:border-fuchsia-500/50 p-3.5 rounded-2xl text-left flex flex-col justify-between transition group hover:shadow-lg hover:shadow-fuchsia-500/5 relative overflow-hidden"
+                  >
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">{product.category || 'General'}</span>
+                      <p className="font-bold text-slate-200 text-xs group-hover:text-fuchsia-400 line-clamp-2 leading-snug">{product.name}</p>
+                    </div>
+                    <div className="mt-3 flex justify-between items-end border-t border-slate-800/60 pt-2">
+                      <span className="font-extrabold text-fuchsia-400 text-sm font-mono">₱{Number(product.price).toFixed(2)}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md font-mono ${product.stock > 5 ? 'bg-slate-800 text-slate-400' : 'bg-red-500/10 text-red-400'}`}>
+                        {product.stock} left
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Cart Sidebar */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 flex flex-col h-[calc(100vh-7rem)] sticky top-20 shadow-2xl">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart size={18} className="text-fuchsia-400" />
+                  <h2 className="font-bold text-white text-sm">Cart Order</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={holdCurrentCart} disabled={cart.length === 0} className="text-xs text-amber-400 hover:text-amber-300 font-semibold disabled:opacity-40 transition">Hold</button>
+                  <button onClick={clearCart} className="text-xs text-red-400 hover:text-red-300 font-semibold transition">Clear</button>
+                </div>
+              </div>
+
+              {/* Held Carts Notification Drawer */}
+              {heldCarts.length > 0 && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-2 my-2 space-y-1">
+                  <p className="text-[10px] font-bold text-amber-400 uppercase">Held Orders ({heldCarts.length})</p>
+                  <div className="flex gap-1.5 overflow-x-auto">
+                    {heldCarts.map((h) => (
+                      <button
+                        key={h.id}
+                        onClick={() => restoreHeldCart(h.id)}
+                        className="bg-slate-900 border border-slate-800 text-amber-300 text-[10px] font-mono font-bold px-2 py-1 rounded-xl whitespace-nowrap hover:bg-slate-800"
+                      >
+                        Restore {h.id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Cart List */}
+              <div className="flex-1 overflow-y-auto py-3 space-y-2.5">
                 {cart.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2">
-                    <ShoppingCart size={32} />
-                    <p className="text-xs">Cart is empty</p>
+                    <ShoppingCart size={32} strokeWidth={1.5} />
+                    <p className="text-xs font-semibold">Cart is currently empty</p>
                   </div>
                 ) : (
                   cart.map((item) => (
-                    <div key={item.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <p className="font-bold text-xs text-slate-200 truncate">{item.name}</p>
-                        <p className="text-[10px] font-mono text-amber-400">₱{item.price.toFixed(2)}</p>
+                    <div key={item.id} className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-2xl flex justify-between items-center">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <p className="text-xs font-bold text-slate-200 truncate">{item.name}</p>
+                        <p className="text-[10px] text-fuchsia-400 font-mono font-semibold">₱{item.price.toFixed(2)}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center bg-slate-900 rounded-lg border border-slate-800">
-                          <button onClick={() => updateQuantity(item.id, -1)} className="p-1 text-slate-400 hover:text-white"><Minus size={12} /></button>
-                          <span className="font-mono text-xs font-bold px-2">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.id, 1)} className="p-1 text-slate-400 hover:text-white"><Plus size={12} /></button>
+                        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl">
+                          <button onClick={() => updateCartQty(item.id, -1)} className="px-2 py-0.5 text-slate-400 hover:text-white font-bold text-xs">-</button>
+                          <span className="text-xs font-mono font-bold px-1">{item.quantity}</span>
+                          <button onClick={() => updateCartQty(item.id, 1)} className="px-2 py-0.5 text-slate-400 hover:text-white font-bold text-xs">+</button>
                         </div>
-                        <button onClick={() => removeFromCart(item.id)} className="text-slate-500 hover:text-rose-400 p-1"><Trash2 size={14} /></button>
+                        <button onClick={() => removeFromCart(item.id)} className="text-slate-500 hover:text-red-400 transition"><Trash2 size={14} /></button>
                       </div>
                     </div>
                   ))
                 )}
               </div>
 
-              <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3">
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between text-slate-400"><span>Subtotal</span><span className="font-mono">₱{subtotal.toFixed(2)}</span></div>
-                  {discount > 0 && <div className="flex justify-between text-rose-400"><span>Discount</span><span className="font-mono">-₱{discount.toFixed(2)}</span></div>}
-                  <div className="flex justify-between font-black text-sm text-white pt-1 border-t border-slate-800">
-                    <span>NET TOTAL</span>
-                    <span className="font-mono text-fuchsia-400 text-lg">₱{netTotal.toFixed(2)}</span>
-                  </div>
+              {/* Cart Totals & Checkout Trigger */}
+              <div className="border-t border-slate-800 pt-3 space-y-2">
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>Subtotal:</span>
+                  <span className="font-mono">₱{subtotal.toFixed(2)}</span>
                 </div>
-
-                <button
-                  disabled={cart.length === 0}
-                  onClick={() => setIsPaymentModalOpen(true)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-emerald-600/20"
-                >
-                  Pay Now
-                </button>
+                <div className="flex justify-between text-base font-black text-white">
+                  <span>NET TOTAL:</span>
+                  <span className="font-mono text-fuchsia-400 text-lg">₱{netTotal.toFixed(2)}</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    disabled={cart.length === 0}
+                    onClick={() => setIsUtangModalOpen(true)}
+                    className="bg-amber-600/20 border border-amber-500/30 text-amber-400 hover:bg-amber-600/30 disabled:opacity-40 font-bold py-3 rounded-2xl text-xs uppercase tracking-wider transition"
+                  >
+                    Utang
+                  </button>
+                  <button
+                    disabled={cart.length === 0}
+                    onClick={() => setIsPaymentModalOpen(true)}
+                    className="bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-40 text-white font-bold py-3 rounded-2xl text-xs uppercase tracking-wider transition shadow-lg shadow-fuchsia-600/30"
+                  >
+                    Pay Cash / GCash
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* --- 2. INVENTORY TAB --- */}
+        {/* ==========================================
+            TAB 2: INVENTORY STOCK MANAGEMENT
+        ========================================== */}
         {activeTab === 'inventory' && (
-          <div className="flex-1 p-6 overflow-y-auto max-w-6xl mx-auto w-full space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-bold">Inventory Management</h2>
-                <p className="text-xs text-slate-400">Manage stock, cost prices, and barcodes directly in Supabase</p>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center gap-2">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3.5 top-3 text-slate-500" size={16} />
+                <input
+                  type="text"
+                  placeholder="Filter inventory items..."
+                  value={inventorySearch}
+                  onChange={(e) => setInventorySearch(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-fuchsia-500"
+                />
               </div>
               <button
-                onClick={handleOpenAddProduct}
-                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-lg shadow-fuchsia-600/30"
+                onClick={() => {
+                  setEditingProduct(null);
+                  setProductForm({ name: '', category: 'General', barcode: '', costPrice: 0, price: 0, stock: 0 });
+                  setIsProductModalOpen(true);
+                }}
+                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold px-4 py-2 rounded-2xl text-xs flex items-center gap-1.5 transition shadow-lg shadow-fuchsia-600/20"
               >
                 <Plus size={16} /> Add Product
               </button>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[10px]">
-                  <tr>
-                    <th className="p-3.5">Product</th>
+            {/* Inventory Data Table */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase bg-slate-950/50">
+                    <th className="p-3.5">Item Name</th>
+                    <th className="p-3.5">Category</th>
                     <th className="p-3.5">Barcode</th>
                     <th className="p-3.5">Cost</th>
-                    <th className="p-3.5">Price</th>
+                    <th className="p-3.5">Selling</th>
                     <th className="p-3.5">Stock</th>
                     <th className="p-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {products.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-800/40 transition">
-                      <td className="p-3.5 font-bold text-white">{p.name}</td>
-                      <td className="p-3.5 font-mono text-slate-400">{p.barcode || 'N/A'}</td>
-                      <td className="p-3.5 font-mono text-emerald-400">₱{(p.costPrice || 0).toFixed(2)}</td>
-                      <td className="p-3.5 font-mono text-amber-400">₱{p.price.toFixed(2)}</td>
-                      <td className="p-3.5 font-mono font-bold">{p.stock}</td>
+                <tbody className="divide-y divide-slate-800 text-xs">
+                  {filteredInventory.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-800/40 transition">
+                      <td className="p-3.5 font-bold text-slate-200">{item.name}</td>
+                      <td className="p-3.5 text-slate-400">{item.category || 'General'}</td>
+                      <td className="p-3.5 font-mono text-slate-400">{item.barcode || '—'}</td>
+                      <td className="p-3.5 font-mono text-emerald-400">₱{Number(item.costPrice || 0).toFixed(2)}</td>
+                      <td className="p-3.5 font-mono text-amber-400 font-bold">₱{Number(item.price || 0).toFixed(2)}</td>
+                      <td className="p-3.5 font-mono">
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${item.stock > 5 ? 'bg-slate-800 text-slate-300' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                          {item.stock} left
+                        </span>
+                      </td>
                       <td className="p-3.5 text-right space-x-2">
-                        <button onClick={() => handleOpenEditProduct(p)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"><Edit size={14} /></button>
-                        <button onClick={() => handleDeleteProduct(p.id)} className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg"><Trash2 size={14} /></button>
+                        <button
+                          onClick={() => {
+                            setEditingProduct(item);
+                            setProductForm(item);
+                            setIsProductModalOpen(true);
+                          }}
+                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(item.id)}
+                          className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -976,115 +966,94 @@ export default function POSSystem() {
           </div>
         )}
 
-        {/* --- 3. ANALYTICS TAB --- */}
+        {/* ==========================================
+            TAB 3: SALES & ANALYTICS
+        ========================================== */}
         {activeTab === 'analytics' && (
-          <div className="flex-1 p-6 overflow-y-auto max-w-5xl mx-auto w-full space-y-6">
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-bold">Sales & Profit Analytics</h2>
-                <p className="text-xs text-slate-400">Live transaction server logs synced with Supabase</p>
-              </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={fetchTransactions}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5"
+                <h2 className="text-base font-bold text-white">Sales & Financial Performance</h2>
+                <select
+                  value={analyticsRange}
+                  onChange={(e) => setAnalyticsRange(e.target.value)}
+                  className="bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 px-3 py-1 font-semibold focus:outline-none"
                 >
-                  <RefreshCw size={14} className={isLoadingTransactions ? 'animate-spin' : ''} /> Sync Data
-                </button>
-                <button
-                  onClick={() => setIsExportModalOpen(true)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
-                >
-                  <Download size={14} /> Export Report
-                </button>
+                  <option value="all">All Time</option>
+                  <option value="today">Today Only</option>
+                </select>
+              </div>
+              <button
+                onClick={() => setIsExportModalOpen(true)}
+                className="bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold px-3.5 py-2 rounded-2xl flex items-center gap-1.5 text-slate-300"
+              >
+                <Mail size={14} /> Export Report
+              </button>
+            </div>
+
+            {/* Metric KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl space-y-1">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Total Revenue</p>
+                <p className="text-xl font-extrabold font-mono text-emerald-400">₱{totalRevenue.toFixed(2)}</p>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl space-y-1">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Cash Collections</p>
+                <p className="text-xl font-extrabold font-mono text-amber-400">₱{totalCash.toFixed(2)}</p>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl space-y-1">
+                <p className="text-[10px] font-bold uppercase text-slate-400">GCash Sales</p>
+                <p className="text-xl font-extrabold font-mono text-blue-400">₱{totalGCash.toFixed(2)}</p>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl space-y-1">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Est. Net Profit</p>
+                <p className="text-xl font-extrabold font-mono text-fuchsia-400">₱{estimatedProfit.toFixed(2)}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block font-semibold">Total Revenue</span>
-                <span className="font-mono text-2xl font-bold text-emerald-400">₱{totalSales.toFixed(2)}</span>
-                <span className="text-[10px] text-slate-500 block font-semibold">{transactions.length} total transactions</span>
+            {/* Complete Transaction Table Log */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden p-4 shadow-2xl space-y-3">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">Transaction History Log</h3>
+                <button
+                  onClick={() => exportToCSV(filteredTransactions, 'Inaki_Transactions')}
+                  className="text-xs text-fuchsia-400 hover:underline flex items-center gap-1 font-semibold"
+                >
+                  <Download size={12} /> CSV Download
+                </button>
               </div>
 
-              <div className="bg-slate-900 border border-blue-500/30 p-4 rounded-2xl space-y-1 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/30">
-                <div className="flex justify-between items-center">
-                  <span className="text-blue-300 text-xs block font-semibold">GCash Payments</span>
-                  <CreditCard size={18} className="text-blue-400" />
-                </div>
-                <span className="font-mono text-2xl font-bold text-blue-400">₱{gcashTotalSales.toFixed(2)}</span>
-                <span className="text-[10px] text-blue-300/80 block font-semibold">{gcashCount} GCash transactions</span>
-              </div>
-
-              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block font-semibold">Estimated Profit</span>
-                <span className="font-mono text-2xl font-bold text-fuchsia-400">₱{estimatedProfit.toFixed(2)}</span>
-                <span className="text-[10px] text-slate-500 block font-semibold">Net revenue - cost</span>
-              </div>
-
-              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block font-semibold">Total Transactions</span>
-                <span className="font-mono text-2xl font-bold text-amber-400">{transactions.length}</span>
-                <span className="text-[10px] text-slate-500 block font-semibold">Server log entries</span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="font-bold text-sm text-slate-200">Supabase Transaction Log</h3>
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                {transactions.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 text-xs">
-                    {isLoadingTransactions ? 'Loading server transactions...' : 'No processed transactions found.'}
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {filteredTransactions.map((tx) => (
+                  <div key={tx.id} className="bg-slate-950 border border-slate-800/80 p-3 rounded-2xl flex justify-between items-center text-xs">
+                    <div className="space-y-0.5">
+                      <span className="font-bold text-slate-200 font-mono">{tx.id}</span>
+                      <p className="text-[10px] text-slate-500">{new Date(tx.created_at).toLocaleString('en-PH')}</p>
+                    </div>
+                    <div className="text-right space-y-0.5">
+                      <p className="font-bold font-mono text-fuchsia-400">₱{Number(tx.netSales || 0).toFixed(2)}</p>
+                      <p className="text-[10px] uppercase font-semibold text-slate-400">{tx.paymentMethod}</p>
+                    </div>
                   </div>
-                ) : (
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[10px]">
-                      <tr>
-                        <th className="p-3.5">Invoice ID</th>
-                        <th className="p-3.5">Date & Time</th>
-                        <th className="p-3.5">Method</th>
-                        <th className="p-3.5">GCash Ref #</th>
-                        <th className="p-3.5">Items</th>
-                        <th className="p-3.5 text-right">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                      {transactions.map((tx) => (
-                        <tr key={tx.id} className="hover:bg-slate-800/40 transition">
-                          <td className="p-3.5 font-mono text-slate-300 font-bold">{tx.id}</td>
-                          <td className="p-3.5 text-slate-400 text-[11px]">{new Date(tx.timestamp).toLocaleString('en-PH')}</td>
-                          <td className="p-3.5 uppercase font-bold">
-                            <span className={`px-2 py-0.5 rounded text-[10px] ${tx.paymentMethod === 'gcash' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                              {tx.paymentMethod}
-                            </span>
-                          </td>
-                          <td className="p-3.5 font-mono text-slate-400 text-[11px]">{tx.gcashRefNumber || '-'}</td>
-                          <td className="p-3.5 text-slate-400">{tx.items.length} items</td>
-                          <td className="p-3.5 text-right font-mono font-bold text-amber-400">₱{tx.netSales.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* --- 4. UTANG LEDGER TAB --- */}
-        {activeTab === 'ledger' && (
-          <div className="flex-1 p-6 overflow-y-auto max-w-5xl mx-auto w-full space-y-4">
+        {/* ==========================================
+            TAB 4: UTANG LEDGER
+        ========================================== */}
+        {activeTab === 'utang' && (
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-bold">Customer Utang Ledger</h2>
-                <p className="text-xs text-slate-400">Track and settle store credit accounts</p>
-              </div>
-              <div className="flex gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-bold">
-                {(['all', 'utang', 'paid'] as const).map((f) => (
+              <h2 className="text-base font-bold text-white">Customer Credit (Utang) Records</h2>
+              <div className="flex gap-1 bg-slate-900 p-1 rounded-2xl border border-slate-800">
+                {['all', 'utang', 'paid'].map((f) => (
                   <button
                     key={f}
-                    onClick={() => setLedgerFilter(f)}
-                    className={`px-3 py-1.5 rounded-lg capitalize transition ${ledgerFilter === f ? 'bg-fuchsia-600 text-white' : 'text-slate-400'}`}
+                    onClick={() => setUtangFilter(f)}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold uppercase ${utangFilter === f ? 'bg-amber-600 text-white' : 'text-slate-400'}`}
                   >
                     {f}
                   </button>
@@ -1092,38 +1061,36 @@ export default function POSSystem() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {ledger
-                .filter((entry) => {
-                  if (ledgerFilter === 'utang') return entry.status === 'unpaid';
-                  if (ledgerFilter === 'paid') return entry.status === 'paid';
-                  return true;
-                })
-                .map((entry) => (
-                  <div key={entry.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {utangLedger
+                .filter((u) => utangFilter === 'all' || u.status === utangFilter)
+                .map((u) => (
+                  <div key={u.id} className="bg-slate-900 border border-slate-800 p-4 rounded-3xl space-y-3">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-bold text-sm text-slate-100">{entry.customerName}</h3>
-                        <p className="text-xs text-slate-400">{entry.phone}</p>
+                        <p className="font-bold text-slate-100 text-sm">{u.customerName}</p>
+                        <p className="text-[10px] text-slate-500">{u.contactNumber || 'No Phone Number'}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{new Date(u.created_at).toLocaleDateString()}</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${entry.status === 'unpaid' ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                        {entry.status}
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${u.status === 'paid' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                        {u.status}
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-300 bg-slate-950 p-2 rounded-lg border border-slate-800">{entry.description}</p>
+                    {u.notes && <p className="text-xs text-slate-400 italic bg-slate-950 p-2 rounded-xl">"{u.notes}"</p>}
 
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-800">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Balance Due</span>
-                        <span className="font-mono font-bold text-sm text-amber-400">₱{entry.amount.toFixed(2)}</span>
-                      </div>
-                      {entry.status === 'unpaid' && (
+                    <div className="flex justify-between items-end pt-2 border-t border-slate-800">
+                      <span className="font-mono font-bold text-amber-400 text-base">₱{Number(u.amount).toFixed(2)}</span>
+                      {u.status === 'utang' && (
                         <button
-                          onClick={() => setLedger((prev) => prev.map((l) => (l.id === entry.id ? { ...l, status: 'paid' } : l)))}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition"
+                          onClick={async () => {
+                            await supabase.from('utang_ledger').update({ status: 'paid' }).eq('id', u.id);
+                            playAudioFeedback('success', settings.soundEnabled);
+                            fetchUtangLedger();
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition"
                         >
-                          Mark Paid
+                          Mark as Paid
                         </button>
                       )}
                     </div>
@@ -1133,62 +1100,68 @@ export default function POSSystem() {
           </div>
         )}
 
-        {/* --- 5. SETTINGS TAB --- */}
+        {/* ==========================================
+            TAB 5: SYSTEM CONFIGURATION
+        ========================================== */}
         {activeTab === 'settings' && (
-          <div className="flex-1 p-6 overflow-y-auto max-w-2xl mx-auto w-full space-y-6">
-            <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
-              <div className="p-3 bg-fuchsia-600/20 text-fuchsia-400 rounded-xl"><Sliders size={22} /></div>
-              <div>
-                <h2 className="text-lg font-bold">Hardware & System Settings</h2>
-                <p className="text-xs text-slate-400">Configure scanner hardware and Bluetooth devices</p>
-              </div>
-            </div>
+          <div className="max-w-xl mx-auto space-y-4">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl space-y-4 shadow-2xl">
+              <h2 className="text-sm font-bold text-white border-b border-slate-800 pb-3">Store & Thermal Receipt Setup</h2>
+              
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="text-slate-400 font-semibold block mb-1">Store Name</label>
+                  <input
+                    type="text"
+                    value={settings.storeName}
+                    onChange={(e) => setSettings({ ...settings, storeName: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
+                  />
+                </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-              <h3 className="font-semibold text-slate-100 text-sm">Bluetooth Thermal Printer & Cash Drawer</h3>
-              <p className="text-xs text-slate-400">Pair your ESC/POS thermal printer to enable direct receipt printing and automatic cashbox unlocking.</p>
-              <button
-                onClick={handleKickCashbox}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-700 flex items-center gap-2 transition"
-              >
-                <Unlock size={16} className="text-amber-400" /> Test Open Cashbox Pulse
-              </button>
-            </div>
+                <div>
+                  <label className="text-slate-400 font-semibold block mb-1">Store Address</label>
+                  <input
+                    type="text"
+                    value={settings.storeAddress}
+                    onChange={(e) => setSettings({ ...settings, storeAddress: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
+                  />
+                </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-              <h3 className="font-semibold text-slate-100 text-sm">Primary POS Scanner Method</h3>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { id: 'hardware', label: 'Hardware Gun', desc: 'USB/BT barcode gun' },
-                  { id: 'camera', label: 'Device Camera', desc: 'Integrated auto-focus' },
-                  { id: 'manual', label: 'Manual Key', desc: 'Direct search input' },
-                ].map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => setPosScanMethod(option.id as ScanMethod)}
-                    className={`p-3.5 rounded-xl border text-left transition ${posScanMethod === option.id ? 'bg-fuchsia-600/10 border-fuchsia-500 text-white' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
-                  >
-                    <p className="font-bold text-xs">{option.label}</p>
-                    <p className="text-[10px] text-slate-500 mt-1">{option.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-400 font-semibold block mb-1">Paper Width</label>
+                    <select
+                      value={settings.paperWidth}
+                      onChange={(e) => setSettings({ ...settings, paperWidth: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100"
+                    >
+                      <option value="58mm">58mm Thermal</option>
+                      <option value="80mm">80mm Thermal</option>
+                    </select>
+                  </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-              <h3 className="font-semibold text-slate-100 text-sm">Theme Appearance</h3>
-              <div className="grid grid-cols-2 gap-3 max-w-sm">
+                  <div>
+                    <label className="text-slate-400 font-semibold block mb-1">Audio Feedback</label>
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, soundEnabled: !settings.soundEnabled })}
+                      className={`w-full py-2 rounded-xl font-bold flex items-center justify-center gap-2 ${
+                        settings.soundEnabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-500'
+                      }`}
+                    >
+                      {settings.soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                      {settings.soundEnabled ? 'Enabled' : 'Muted'}
+                    </button>
+                  </div>
+                </div>
+
                 <button
-                  onClick={() => setTheme('dark')}
-                  className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-bold transition ${theme === 'dark' ? 'border-fuchsia-500 bg-fuchsia-950/20 text-white' : 'border-slate-800 text-slate-400'}`}
+                  onClick={() => handleBluetoothPrint({ id: 'TEST-DRAWER', created_at: new Date().toISOString(), items: [], netSales: 0, paymentMethod: 'cash' })}
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3 rounded-2xl flex items-center justify-center gap-2 border border-slate-700 transition mt-2"
                 >
-                  <Moon size={16} /> Dark Mode
-                </button>
-                <button
-                  onClick={() => setTheme('light')}
-                  className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-bold transition ${theme === 'light' ? 'border-fuchsia-500 bg-fuchsia-950/20 text-white' : 'border-slate-800 text-slate-400'}`}
-                >
-                  <Sun size={16} /> Light Mode
+                  <Bluetooth size={16} /> Test ESC/POS Cashbox Pulse
                 </button>
               </div>
             </div>
@@ -1196,68 +1169,73 @@ export default function POSSystem() {
         )}
       </main>
 
-      {/* --- PAYMENT MODAL --- */}
+      {/* ==========================================
+          MODAL 1: CHECKOUT / PAYMENT MODAL
+      ========================================== */}
       {isPaymentModalOpen &&
         createPortal(
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <div>
-                  <h3 className="text-lg font-bold text-white">Process Payment</h3>
-                  <p className="text-xs text-slate-400">Select payment method and save to Supabase</p>
+                  <h3 className="text-base font-bold text-white">Process Payment</h3>
+                  <p className="text-xs text-slate-400">Select payment method and enter transaction detail</p>
                 </div>
                 <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition">✕</button>
               </div>
 
+              {/* Discount / Fees adjustments */}
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
-                    const d = prompt('Enter discount amount (₱):', discount.toString());
+                    const d = prompt('Enter discount (₱):', discount.toString());
                     if (d !== null) setDiscount(Number(d) || 0);
                   }}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+                  className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
                 >
-                  % Disc: ₱{discount}
+                  Disc: ₱{discount}
                 </button>
                 <button
                   onClick={() => {
                     const f = prompt('Enter extra fee (₱):', extraFee.toString());
                     if (f !== null) setExtraFee(Number(f) || 0);
                   }}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+                  className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
                 >
-                  🏷️ Fee: ₱{extraFee}
+                  Fee: ₱{extraFee}
                 </button>
                 <button
                   onClick={() => {
                     const del = prompt('Enter delivery fee (₱):', deliveryFee.toString());
                     if (del !== null) setDeliveryFee(Number(del) || 0);
                   }}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+                  className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
                 >
-                  🚚 Del: ₱{deliveryFee}
+                  Delivery: ₱{deliveryFee}
                 </button>
               </div>
 
+              {/* Payment Selector */}
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setPaymentMethod('cash')}
-                  className={`py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${
-                    paymentMethod === 'cash' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-slate-800/50 border-slate-700 text-slate-400'
+                  className={`py-3 rounded-2xl font-bold text-xs uppercase flex items-center justify-center gap-2 transition border ${
+                    paymentMethod === 'cash' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-400'
                   }`}
                 >
                   💵 Cash
                 </button>
                 <button
                   onClick={() => setPaymentMethod('gcash')}
-                  className={`py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${
-                    paymentMethod === 'gcash' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-slate-800/50 border-slate-700 text-slate-400'
+                  className={`py-3 rounded-2xl font-bold text-xs uppercase flex items-center justify-center gap-2 transition border ${
+                    paymentMethod === 'gcash' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-400'
                   }`}
                 >
                   💳 GCash
                 </button>
               </div>
 
+              {/* Input section conditionally rendered */}
               {paymentMethod === 'cash' ? (
                 <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
                   <div className="flex justify-between items-center text-xs text-slate-400">
@@ -1273,10 +1251,22 @@ export default function POSSystem() {
                     onChange={(e) => setCashTendered(Number(e.target.value))}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-emerald-400 font-mono font-bold text-xl focus:outline-none focus:border-emerald-500"
                   />
+                  {/* Quick Cash Buttons */}
+                  <div className="flex gap-2 pt-1">
+                    {[netTotal, 100, 200, 500, 1000].map((amt) => (
+                      <button
+                        key={amt}
+                        onClick={() => setCashTendered(amt)}
+                        className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 hover:text-white py-1 rounded-lg text-[10px] font-mono font-bold"
+                      >
+                        ₱{amt}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <label className="text-xs text-slate-400 block font-semibold">GCash Reference Number (`gcashrefnumber`):</label>
+                  <label className="text-xs text-slate-400 block font-semibold">GCash Reference Number</label>
                   <input
                     type="text"
                     placeholder="e.g. 53462828644"
@@ -1287,7 +1277,8 @@ export default function POSSystem() {
                 </div>
               )}
 
-              <div className="border-t border-slate-800 pt-4 space-y-1.5 text-xs">
+              {/* Order Net Summary */}
+              <div className="border-t border-slate-800 pt-3 space-y-1 text-xs">
                 <div className="flex justify-between text-slate-400"><span>Subtotal</span><span className="font-mono">₱{subtotal.toFixed(2)}</span></div>
                 <div className="flex justify-between text-base font-black">
                   <span className="text-white">NET TOTAL</span>
@@ -1298,37 +1289,39 @@ export default function POSSystem() {
               <button
                 onClick={handleCompleteTransaction}
                 disabled={paymentMethod === 'cash' && cashTendered < netTotal}
-                className={`w-full py-4 rounded-2xl font-bold text-sm uppercase tracking-wider transition ${
+                className={`w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-wider transition ${
                   paymentMethod === 'cash' && cashTendered < netTotal
                     ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                     : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30'
                 }`}
               >
-                Confirm & Save to Server
+                Confirm Transaction
               </button>
             </div>
           </div>,
           document.body
         )}
 
-      {/* --- RECEIPT MODAL --- */}
+      {/* ==========================================
+          MODAL 2: RECEIPT VIEW WITH CASH & GCASH
+      ========================================== */}
       {receiptData && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block overflow-y-auto">
           <style>{`
             @media print {
-              @page { size: 58mm auto; margin: 0mm !important; }
-              html, body { width: 58mm !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; color: #000000 !important; }
+              @page { size: ${settings.paperWidth} auto; margin: 0mm !important; }
+              html, body { width: ${settings.paperWidth} !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; color: #000000 !important; }
               body * { visibility: hidden; }
               #printable-receipt, #printable-receipt * { visibility: visible !important; color: #000000 !important; }
-              #printable-receipt { position: absolute !important; left: 0 !important; top: 0 !important; width: 58mm !important; max-width: 58mm !important; padding: 2mm !important; margin: 0 !important; background: #ffffff !important; }
+              #printable-receipt { position: absolute !important; left: 0 !important; top: 0 !important; width: ${settings.paperWidth} !important; max-width: ${settings.paperWidth} !important; padding: 2mm !important; margin: 0 !important; background: #ffffff !important; }
               .print-hide { display: none !important; }
             }
           `}</style>
 
           <div id="printable-receipt" className="bg-white text-black p-4 rounded-2xl w-full max-w-[280px] shadow-2xl font-mono text-[11px] leading-tight print:shadow-none print:w-[58mm] print:max-w-[58mm] print:rounded-none print:p-0 mx-auto">
             <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
-              <h2 className="font-extrabold text-xs tracking-wider uppercase">IÑAKI STORE</h2>
-              <p className="text-[9px] text-gray-600">{new Date(receiptData.timestamp).toLocaleString('en-PH')}</p>
+              <h2 className="font-extrabold text-xs tracking-wider uppercase">{settings.storeName}</h2>
+              <p className="text-[9px] text-gray-600">{new Date(receiptData.created_at || receiptData.timestamp).toLocaleString('en-PH')}</p>
               <p className="text-[9px] font-bold">Receipt #: {receiptData.id}</p>
             </div>
 
@@ -1337,24 +1330,47 @@ export default function POSSystem() {
                 <div key={item.id} className="flex justify-between items-start">
                   <div className="pr-1 min-w-0 flex-1">
                     <p className="font-semibold truncate text-[10px]">{item.name}</p>
-                    <p className="text-[9px] text-gray-600">{item.quantity} x P{item.price.toFixed(2)}</p>
+                    <p className="text-[9px] text-gray-600">{item.quantity} x P{Number(item.price).toFixed(2)}</p>
                   </div>
                   <span className="font-bold whitespace-nowrap text-[10px]">P{(item.price * item.quantity).toFixed(2)}</span>
                 </div>
               ))}
             </div>
 
+            {/* Financial Breakdown */}
             <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
-              <div className="flex justify-between font-bold text-xs pt-0.5"><span>TOTAL:</span><span>P{receiptData.netSales.toFixed(2)}</span></div>
-              <div className="flex justify-between text-gray-800 uppercase pt-0.5 text-[9px]"><span>PAYMENT:</span><span className="font-bold">{receiptData.paymentMethod}</span></div>
-              {receiptData.gcashRefNumber && (
-                <div className="flex justify-between text-gray-800 text-[9px]"><span>GCASH REF:</span><span className="font-bold">{receiptData.gcashRefNumber}</span></div>
+              <div className="flex justify-between font-bold text-xs pt-0.5">
+                <span>TOTAL:</span>
+                <span>P{Number(receiptData.netSales).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-gray-800 uppercase pt-0.5 text-[9px]">
+                <span>PAYMENT METHOD:</span>
+                <span className="font-bold">{receiptData.paymentMethod}</span>
+              </div>
+
+              {receiptData.paymentMethod === 'cash' && (
+                <>
+                  <div className="flex justify-between text-gray-800 text-[9px] pt-0.5">
+                    <span>CASH TENDERED:</span>
+                    <span className="font-bold">P{(receiptData.cashTendered || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-800 text-[9px]">
+                    <span>CHANGE:</span>
+                    <span className="font-bold">P{(receiptData.change ?? Math.max(0, (receiptData.cashTendered || 0) - receiptData.netSales)).toFixed(2)}</span>
+                  </div>
+                </>
+              )}
+
+              {(receiptData.paymentMethod === 'gcash' || receiptData.gcashRefNumber) && (
+                <div className="flex justify-between text-gray-800 text-[9px] pt-0.5">
+                  <span>GCASH REF #:</span>
+                  <span className="font-bold">{receiptData.gcashRefNumber || 'N/A'}</span>
+                </div>
               )}
             </div>
 
             <div className="pt-2 text-center text-[9px] space-y-0.5">
-              <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
-              <p className="text-gray-600">Please Come Again</p>
+              <p className="font-bold uppercase tracking-wider">{settings.receiptFooter}</p>
             </div>
 
             {btStatus && (
@@ -1367,7 +1383,7 @@ export default function POSSystem() {
                 onClick={() => handleBluetoothPrint(receiptData)}
                 className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition shadow-lg shadow-blue-600/20"
               >
-                <Bluetooth size={14} /> BT Print & Open Cashbox
+                <Bluetooth size={14} /> BT Thermal Print
               </button>
 
               <div className="flex items-center justify-center gap-2">
@@ -1379,13 +1395,15 @@ export default function POSSystem() {
         </div>
       )}
 
-      {/* --- ADD / EDIT PRODUCT MODAL --- */}
+      {/* ==========================================
+          MODAL 3: ADD / EDIT PRODUCT MODAL
+      ========================================== */}
       {isProductModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="font-bold text-slate-100 text-base">
-                {editingProduct ? 'Edit Product Item' : 'Add New Inventory Item'}
+                {editingProduct ? 'Edit Inventory Item' : 'Add New Inventory Item'}
               </h3>
               <button onClick={() => setIsProductModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
             </div>
@@ -1399,7 +1417,18 @@ export default function POSSystem() {
                   placeholder="e.g. San Miguel Light 330ml"
                   value={productForm.name}
                   onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-fuchsia-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-fuchsia-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-400 block mb-1">Category</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Beverages, Snacks..."
+                  value={productForm.category || ''}
+                  onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-fuchsia-500"
                 />
               </div>
 
@@ -1411,7 +1440,7 @@ export default function POSSystem() {
                     placeholder="480000123456"
                     value={productForm.barcode}
                     onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-100 focus:outline-none focus:border-fuchsia-500"
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-fuchsia-500"
                   />
                   <button
                     type="button"
@@ -1462,16 +1491,30 @@ export default function POSSystem() {
                 type="submit"
                 className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-fuchsia-600/20 mt-2"
               >
-                {editingProduct ? 'Save Changes' : 'Add to Supabase Database'}
+                {editingProduct ? 'Save Changes' : 'Save Item to Database'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- CAMERA SCANNER MODALS --- */}
+      {/* ==========================================
+          MODAL 4: RECORD CREDIT (UTANG) MODAL
+      ========================================== */}
+      <AddUtangModal
+        isOpen={isUtangModalOpen}
+        onClose={() => setIsUtangModalOpen(false)}
+        onSave={handleSaveUtang}
+        cartItems={cart}
+        subtotal={netTotal}
+      />
+
+      {/* ==========================================
+          MODAL 5: CAMERA SCANNER MODALS
+      ========================================== */}
       <CameraScanner
         isOpen={isPosCameraOpen}
+        soundEnabled={settings.soundEnabled}
         onClose={() => setIsPosCameraOpen(false)}
         onScan={(scannedBarcode) => {
           const cleanCode = String(scannedBarcode).trim();
@@ -1483,7 +1526,7 @@ export default function POSSystem() {
             addToCart(foundProduct);
           } else {
             setSearchQuery(cleanCode);
-            alert(`No product found with barcode: ${cleanCode}`);
+            alert(`No match found for barcode: ${cleanCode}`);
           }
           setIsPosCameraOpen(false);
         }}
@@ -1491,6 +1534,7 @@ export default function POSSystem() {
 
       <CameraScanner
         isOpen={isProductCameraOpen}
+        soundEnabled={settings.soundEnabled}
         onClose={() => setIsProductCameraOpen(false)}
         onScan={(scannedBarcode) => {
           setProductForm((prev) => ({ ...prev, barcode: String(scannedBarcode).trim() }));
@@ -1498,15 +1542,17 @@ export default function POSSystem() {
         }}
       />
 
-      {/* --- EXPORT MODAL --- */}
+      {/* ==========================================
+          MODAL 6: REPORT EXPORT MODAL
+      ========================================== */}
       {isExportModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
             <button onClick={() => setIsExportModalOpen(false)} className="absolute right-4 top-4 text-slate-400 hover:text-white"><X size={18} /></button>
-            <h3 className="text-base font-bold text-slate-100 mb-4">Export Analytics Report</h3>
+            <h3 className="text-base font-bold text-slate-100 mb-4">Export Report Data</h3>
 
             <div className="flex border-b border-slate-800 mb-4 text-xs font-bold">
-              {(['sales', 'movement', 'capital'] as const).map((tab) => (
+              {['sales', 'inventory', 'utang'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setExportTab(tab)}
@@ -1519,7 +1565,7 @@ export default function POSSystem() {
 
             <div className="space-y-3.5">
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">Recipient Email Address</label>
+                <label className="text-xs font-semibold text-slate-400 block mb-1">Email Recipient</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-2.5 text-slate-500" size={16} />
                   <input
@@ -1531,15 +1577,26 @@ export default function POSSystem() {
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  alert(`Report (${exportTab.toUpperCase()}) exported successfully to ${exportEmail}!`);
-                  setIsExportModalOpen(false);
-                }}
-                className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-md shadow-fuchsia-600/30"
-              >
-                Export Now
-              </button>
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    const dataToExport = exportTab === 'sales' ? transactions : exportTab === 'inventory' ? products : utangLedger;
+                    exportToCSV(dataToExport, `Inaki_${exportTab}`);
+                  }}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition border border-slate-700 flex items-center justify-center gap-1.5"
+                >
+                  <Download size={14} /> Save CSV
+                </button>
+                <button
+                  onClick={() => {
+                    alert(`Report (${exportTab.toUpperCase()}) successfully emailed to ${exportEmail}!`);
+                    setIsExportModalOpen(false);
+                  }}
+                  className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-md shadow-fuchsia-600/30"
+                >
+                  Send Email
+                </button>
+              </div>
             </div>
           </div>
         </div>
