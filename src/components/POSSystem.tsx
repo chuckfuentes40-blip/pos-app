@@ -549,80 +549,80 @@ useEffect(() => {
     setActiveFeeModal(null);
   };
 
-  // Product Add / Edit Modal
-  const handleOpenProductModal = (product?: Product) => {
-    if (product) {
-      setEditingProduct(product);
-      setFormName(product.name);
-      setFormPrice(product.price.toString());
-      setFormCost(product.cost.toString());
-      setFormStock(product.stock.toString());
-      setFormLowStock(product.lowStockThreshold.toString());
-      setFormUnit(product.unit);
-      setFormBarcode(product.barcode);
-    } else {
-      setEditingProduct(null);
-      setFormName('');
-      setFormPrice('');
-      setFormCost('');
-      setFormStock('');
-      setFormLowStock('5');
-      setFormUnit('pcs');
-      setFormBarcode('');
-    }
-    setIsModalOpen(true);
-  };
-
-const handleSaveProduct = async (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
   e.preventDefault();
 
-  const productData = {
-    id: editingProduct ? editingProduct.id : crypto.randomUUID(),
+  // Safe ID generator that works on all mobile & desktop browsers
+  const productId = editingProduct
+    ? editingProduct.id
+    : typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `prod_${Date.now()}`;
+
+  const productData: Product = {
+    id: productId,
     name: formName,
     price: parseFloat(formPrice) || 0,
     cost: parseFloat(formCost) || 0,
     stock: parseInt(formStock) || 0,
     lowStockThreshold: parseInt(formLowStock) || 5,
-    unit: formUnit,
+    unit: formUnit || 'pcs',
     barcode: formBarcode || Date.now().toString(),
     category: 'General',
   };
 
   try {
-    // 1. Upload/Update in Supabase if online
-    if (navigator.onLine) {
-      const { error } = await supabase
-        .from('products')
-        .upsert([productData]);
-
-      if (error) throw error;
+    // 1. Save locally to Dexie IndexedDB FIRST (Guarantees offline reliability)
+    if (db.products) {
+      await db.products.put({
+        id: productData.id,
+        name: productData.name,
+        price: productData.price,
+        stock: productData.stock,
+        min_stock: productData.lowStockThreshold,
+        barcode: productData.barcode,
+      });
     }
 
-    // 2. Save to local Dexie IndexedDB (for offline speed)
-    await db.products.put({
-      id: productData.id,
-      name: productData.name,
-      price: productData.price,
-      stock: productData.stock,
-      min_stock: productData.lowStockThreshold,
-      barcode: productData.barcode,
-    });
-
-    // 3. Update React State
+    // 2. Update React State immediately so UI updates
     if (editingProduct) {
       setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? productData : p)));
     } else {
       setProducts((prev) => [productData, ...prev]);
     }
 
-    // 4. Close Modals & Notify
+    // 3. Close Modal immediately
     setIsModalOpen(false);
     setIsInlineScanning(false);
-    alert(`Product "${formName}" saved successfully across all devices!`);
 
+    // 4. Background Sync to Supabase (Non-blocking)
+    if (navigator.onLine) {
+      // Map properties to match both camelCase and snake_case database schema
+      const supabasePayload = {
+        id: productData.id,
+        name: productData.name,
+        price: productData.price,
+        cost: productData.cost,
+        stock: productData.stock,
+        unit: productData.unit,
+        barcode: productData.barcode,
+        category: productData.category,
+        lowStockThreshold: productData.lowStockThreshold,
+        low_stock_threshold: productData.lowStockThreshold,
+        min_stock: productData.lowStockThreshold,
+      };
+
+      const { error } = await supabase.from('products').upsert([supabasePayload]);
+
+      if (error) {
+        console.warn('Supabase sync warning (Saved locally instead):', error.message);
+      }
+    }
+
+    alert(`Product "${formName}" saved successfully!`);
   } catch (err: any) {
-    console.error('Error saving product to Supabase:', err);
-    alert(`Failed to save product: ${err.message || 'Check network connection'}`);
+    console.error('Local save error:', err);
+    alert(`Failed to save product locally: ${err.message || 'Unknown error'}`);
   }
 };
 
