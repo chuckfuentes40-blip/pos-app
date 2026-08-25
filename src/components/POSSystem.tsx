@@ -360,6 +360,43 @@ export default function POSSystem() {
   }
 };
 
+// Safe helper to prevent toFixed runtime crashes
+const formatMoney = (val: number | string | undefined | null): string => {
+  const num = Number(val);
+  return isNaN(num) ? '0.00' : num.toFixed(2);
+};
+
+const fetchTransactions = async () => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .order('timestamp', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching transactions:', error);
+    return;
+  }
+
+  // Map lowercase Supabase keys to React camelCase keys
+  const normalizedTransactions = (data || []).map((trx: any) => ({
+    id: trx.id,
+    timestamp: trx.timestamp,
+    items: Array.isArray(trx.items) ? trx.items : [],
+    subtotal: Number(trx.subtotal || 0),
+    discount: Number(trx.discount || 0),
+    serviceFee: Number(trx.servicefee ?? trx.serviceFee ?? 0),
+    deliveryFee: Number(trx.deliveryfee ?? trx.deliveryFee ?? 0),
+    netSales: Number(trx.netsales ?? trx.netSales ?? 0),
+    paymentMethod: trx.paymentmethod || trx.paymentMethod || 'cash',
+    cashReceived: Number(trx.cashreceived ?? trx.cashReceived ?? 0),
+    changeDue: Number(trx.changedue ?? trx.changeDue ?? 0),
+    gcashRefNumber: trx.gcashrefnumber || trx.gcashRefNumber || '',
+    customer: trx.customer || undefined,
+  }));
+
+  setTransactions(normalizedTransactions);
+};
+
 // Load saved theme preference on mount
 useEffect(() => {
   const savedTheme = localStorage.getItem('pos_theme') as 'dark' | 'light';
@@ -1300,28 +1337,39 @@ const handleDeleteProduct = (id: string) => {
               </div>
 
               {/* Transaction Logs */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
-                <h3 className="text-sm font-bold text-slate-100 mb-4">Recent Sales Activity</h3>
-                <div className="space-y-2">
-                  {transactions.map((trx) => (
-                    <div
-                      key={trx.id}
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <span className="font-mono font-bold text-fuchsia-400">{trx.id}</span>
-                        <p className="text-[10px] text-slate-500">
-                          {new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {trx.items.length} items
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono font-bold text-white">₱{trx.netSales.toFixed(2)}</span>
-                        <span className="block text-[10px] uppercase font-bold text-slate-400">{trx.paymentMethod}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+<div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+  <h3 className="text-sm font-bold text-slate-100 mb-4">Recent Sales Activity</h3>
+  <div className="space-y-2">
+    {(transactions || []).map((trx) => {
+      // Safe fallback for netSales from both camelCase and lowercase Supabase response
+      const netSalesVal = Number(trx.netSales ?? (trx as any).netsales ?? 0);
+      const itemsCount = Array.isArray(trx.items) ? trx.items.length : 0;
+      const payment = trx.paymentMethod || (trx as any).paymentmethod || 'CASH';
+
+      return (
+        <div
+          key={trx.id}
+          className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs"
+        >
+          <div>
+            <span className="font-mono font-bold text-fuchsia-400">{trx.id}</span>
+            <p className="text-[10px] text-slate-500">
+              {trx.timestamp ? new Date(trx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'} • {itemsCount} items
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="font-mono font-bold text-white">
+              ₱{netSalesVal.toFixed(2)}
+            </span>
+            <span className="block text-[10px] uppercase font-bold text-slate-400">
+              {payment}
+            </span>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</div>
             </div>
           )}
 
