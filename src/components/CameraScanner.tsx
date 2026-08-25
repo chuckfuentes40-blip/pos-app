@@ -12,6 +12,7 @@ interface CameraScannerProps {
 export default function CameraScanner({ isOpen, onClose, onScan }: CameraScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const hasScannedRef = useRef<boolean>(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -41,18 +42,22 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
     getDevices();
   }, [isOpen]);
 
-  // Start video stream
+  // Start video stream & scanner logic
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
+    hasScannedRef.current = false;
     setLoading(true);
     setError(null);
 
+    // Stop existing stream if switching devices
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+
+    let animationFrameId: number;
 
     const startCamera = async () => {
       try {
@@ -102,8 +107,7 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
 
     startCamera();
 
-    // Barcode detection with double-verification anti-ghosting logic
-    let animationFrameId: number;
+    // Barcode detection with safe cleanup upon match
     let lastCode = '';
     let consecutiveMatches = 0;
 
@@ -115,14 +119,14 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
       const detectBarcode = async () => {
         if (
           videoRef.current &&
-          videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA
+          videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA &&
+          !hasScannedRef.current
         ) {
           try {
             const barcodes = await barcodeDetector.detect(videoRef.current);
             if (barcodes.length > 0) {
               const scannedValue = barcodes[0].rawValue.trim();
 
-              // Require minimum length to ignore noise
               if (scannedValue.length >= 3) {
                 if (scannedValue === lastCode) {
                   consecutiveMatches++;
@@ -131,9 +135,24 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
                   consecutiveMatches = 1;
                 }
 
-                // Verify same barcode across 2 consecutive frames before accepting
-                if (consecutiveMatches >= 2 && onScan) {
-                  onScan(scannedValue);
+                // Verify across 2 consecutive frames
+                if (consecutiveMatches >= 2 && !hasScannedRef.current) {
+                  hasScannedRef.current = true;
+
+                  // 1. Stop animation loop
+                  if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+                  // 2. Immediately release hardware camera tracks to prevent mobile crash
+                  if (streamRef.current) {
+                    streamRef.current.getTracks().forEach((track) => track.stop());
+                    streamRef.current = null;
+                  }
+                  if (videoRef.current) {
+                    videoRef.current.srcObject = null;
+                  }
+
+                  // 3. Trigger callback and close
+                  if (onScan) onScan(scannedValue);
                   onClose();
                   return;
                 }
@@ -143,10 +162,11 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
               lastCode = '';
             }
           } catch {
-            // Frame read continuation
+            // Frame skip catch
           }
         }
-        if (isMounted) {
+
+        if (isMounted && !hasScannedRef.current) {
           animationFrameId = requestAnimationFrame(detectBarcode);
         }
       };
@@ -177,7 +197,13 @@ export default function CameraScanner({ isOpen, onClose, onScan }: CameraScanner
             <h3 className="text-sm font-bold">Camera Scanner</h3>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track) => track.stop());
+                streamRef.current = null;
+              }
+              onClose();
+            }}
             className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
           >
             <X size={20} />
