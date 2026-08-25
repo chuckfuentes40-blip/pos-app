@@ -148,9 +148,12 @@ export default function POSSystem() {
   // Data state
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
-  const saved = localStorage.getItem('pos_transactions');
-  return saved ? JSON.parse(saved) : [];
-});
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pos_transactions');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
   const [ledger, setLedger] = useState<LedgerEntry[]>(INITIAL_LEDGER);
 
   // POS Cart State
