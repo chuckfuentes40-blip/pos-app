@@ -149,18 +149,26 @@ export default function POSSystem() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   // Hardware / PWA setup
- // Lazy state initialization from LocalStorage
-const [posScanMethod, setPosScanMethod] = useState<ScanMethod>(() => {
-  const savedMethod = localStorage.getItem('inaki_pos_scan_method') as ScanMethod;
-  return savedMethod || 'hardware';
-});
+ // Initial state defaults to 'hardware' for SSR safety
+const [posScanMethod, setPosScanMethod] = useState<ScanMethod>('hardware');
 
-// Handler to update state and update LocalStorage simultaneously
+// Load saved scan method from localStorage on client mount
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    const savedMethod = localStorage.getItem('inaki_pos_scan_method') as ScanMethod;
+    if (savedMethod) {
+      setPosScanMethod(savedMethod);
+    }
+  }
+}, []);
+
+// Handler to update state and save preference to LocalStorage
 const handleScanMethodChange = (method: ScanMethod) => {
   setPosScanMethod(method);
-  localStorage.setItem('inaki_pos_scan_method', method);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('inaki_pos_scan_method', method);
+  }
 };
-
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   // Data state
@@ -292,7 +300,7 @@ const handleScanMethodChange = (method: ScanMethod) => {
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  const handleBluetoothPrint = async () => {
+ const handleBluetoothPrint = async () => {
   if (!receiptData) return;
 
   if (!('bluetooth' in navigator)) {
@@ -334,14 +342,13 @@ const handleScanMethodChange = (method: ScanMethod) => {
       return;
     }
 
-    
-
     // 4. Build ESC/POS Raw Data Stream (32 character width for 58mm)
     const encoder = new TextEncoder();
     let esc = '';
 
     // ESC/POS Command Constants
     const INIT = '\x1B\x40';
+    const OPEN_CASH_DRAWER = '\x1B\x70\x00\x19\xFA'; // Sends pulse signal to RJ11/RJ12 Cash Drawer
     const ALIGN_CENTER = '\x1B\x61\x01';
     const ALIGN_LEFT = '\x1B\x61\x00';
     const ALIGN_RIGHT = '\x1B\x61\x02';
@@ -356,8 +363,9 @@ const handleScanMethodChange = (method: ScanMethod) => {
       return left + ' '.repeat(spaceLen) + right + LINE_FEED;
     };
 
-    // Build Receipt Content
+    // Build Receipt Content & Trigger Cash Drawer Kick
     esc += INIT;
+    esc += OPEN_CASH_DRAWER; // Kicks cash box open immediately upon printing
     esc += ALIGN_CENTER + BOLD_ON + 'INAKI STORE' + LINE_FEED + BOLD_OFF;
     esc += new Date(receiptData.timestamp).toLocaleString('en-PH') + LINE_FEED;
     esc += `Receipt #: ${receiptData.id}` + LINE_FEED;
@@ -406,9 +414,9 @@ const handleScanMethodChange = (method: ScanMethod) => {
     esc += '--------------------------------' + LINE_FEED;
     esc += ALIGN_CENTER + BOLD_ON + 'Maraming Salamat Po!' + LINE_FEED + BOLD_OFF;
     esc += 'Please Come Again' + LINE_FEED;
-    esc += LINE_FEED + LINE_FEED + LINE_FEED; // Feed paper
+    esc += LINE_FEED + LINE_FEED + LINE_FEED;
 
-    // 5. Send Chunked Bytes to Bluetooth Printer (20-byte MTU limit handling)
+    // 5. Send Chunked Bytes to Bluetooth Printer
     const data = encoder.encode(esc);
     const chunkSize = 20;
     for (let i = 0; i < data.length; i += chunkSize) {
@@ -416,7 +424,7 @@ const handleScanMethodChange = (method: ScanMethod) => {
       await writeCharacteristic.writeValue(chunk);
     }
 
-    alert('Receipt printed successfully!');
+    alert('Receipt printed and Cash Box opened!');
   } catch (error: any) {
     console.error('Bluetooth Print Error:', error);
     alert(`Bluetooth Print Failed: ${error.message || 'Device disconnected or cancelled'}`);
@@ -2032,31 +2040,32 @@ const handleDeleteProduct = (id: string) => {
               <div className="h-4 print:h-8" />
 
             {/* Screen Control Buttons */}
-        <div className="mt-3 flex flex-col sm:flex-row gap-2 print:hidden print-hide">
-          {/* Direct Bluetooth Print */}
-          <button
-            onClick={handleBluetoothPrint}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1.5 text-xs transition"
-          >
-            <Bluetooth size={14} /> Direct BT Print
-          </button>
-
-          {/* Standard Browser System Print */}
-          <button
-            onClick={() => window.print()}
-            className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs transition"
-          >
-            <Printer size={14} /> Print
-          </button>
-
-          {/* Close Modal */}
-          <button
-            onClick={() => setReceiptData(null)}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-xl font-sans font-semibold text-xs transition"
-          >
-            Close
-          </button>
-        </div>
+            <div className="flex items-center justify-center gap-2 mt-5 w-full">
+              <button
+                type="button"
+                onClick={handleBluetoothPrint}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-blue-600/30"
+              >
+                <span>📶</span> Direct BT Print
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-fuchsia-600/30"
+              >
+                <span>🖨️</span> Print
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReceiptData(null);
+                  setIsPaymentModalOpen(false);
+                }}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl transition"
+              >
+                Close
+              </button>
+            </div>
             </div>
 
           </div>
