@@ -1238,39 +1238,6 @@ const handleDeleteProduct = (id: string) => {
                     </div>
                   )}
 
-                  {/* Sidebar Controls & Total */}
-                  <div className="p-3 bg-slate-950 border-t border-slate-800 space-y-3">
-                    {/* Discount & Fee Quick Action Buttons */}
-                    <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-                      <button
-                        onClick={() => {
-                          const val = prompt('Enter discount amount (₱):', discountAmount.toString());
-                          if (val !== null) setDiscountAmount(parseFloat(val) || 0);
-                        }}
-                        className="py-1.5 bg-slate-900 border border-slate-800 hover:border-fuchsia-500 rounded-lg text-slate-300 font-medium"
-                      >
-                        % Disc: ₱{discountAmount}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const val = prompt('Enter service fee (₱):', serviceFee.toString());
-                          if (val !== null) setServiceFee(parseFloat(val) || 0);
-                        }}
-                        className="py-1.5 bg-slate-900 border border-slate-800 hover:border-fuchsia-500 rounded-lg text-slate-300 font-medium"
-                      >
-                        🏷️ Fee: ₱{serviceFee}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const val = prompt('Enter delivery fee (₱):', deliveryFee.toString());
-                          if (val !== null) setDeliveryFee(parseFloat(val) || 0);
-                        }}
-                        className="py-1.5 bg-slate-900 border border-slate-800 hover:border-fuchsia-500 rounded-lg text-slate-300 font-medium"
-                      >
-                        🚚 Del: ₱{deliveryFee}
-                      </button>
-                    </div>
-
                     {/* Calculation Breakdown */}
                     <div className="pt-2 border-t border-slate-800/80 space-y-1 text-xs">
                       <div className="flex justify-between text-slate-400">
