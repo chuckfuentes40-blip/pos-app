@@ -372,8 +372,8 @@ useEffect(() => {
 
         if (!trxError && trxData) {
           setTransactions(trxData);
-          if (db.transactions) {
-            await db.transactions.bulkPut(trxData);
+          if (db.transaction) {
+            await db.transaction.bulkPut(trxData);
           }
           return;
         }
@@ -385,10 +385,12 @@ useEffect(() => {
         setProducts(localProducts as any);
       }
 
-      if (db.transactions) {
-        const localTransactions = await db.transactions.toArray();
+      if (db.transaction) {
+        const localTransactions = await db.transaction.toArray();
         if (localTransactions.length > 0) {
-          localTransactions.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          localTransactions.sort(
+            (a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
           setTransactions(localTransactions as any);
         }
       }
