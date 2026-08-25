@@ -38,8 +38,7 @@ import {
   Tag,
   Sun,
   Moon
-} fromimport { Bluetooth } from 'lucide-react';
- 'lucide-react';
+} from 'lucide-react';
 
 // --- Types & Interfaces ---
 export type ScanMethod = 'hardware' | 'camera' | 'manual';
