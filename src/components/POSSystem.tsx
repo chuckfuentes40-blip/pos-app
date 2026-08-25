@@ -1541,62 +1541,52 @@ const handleDeleteProduct = (id: string) => {
 
 {/* Printable Receipt Modal */}
 {receiptData && (
-  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-transparent print:static print:block print:overflow-visible overflow-y-auto">
-    {/* Thermal Print Stylesheet */}
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block overflow-y-auto">
+    {/* Thermal Print Stylesheet for 58mm Continuous Roll */}
     <style>{`
       @media print {
         @page {
           size: 58mm auto;
-          margin: 0mm;
+          margin: 0mm !important;
         }
-
-        /* 1. Reset document roots */
         html, body {
           width: 58mm !important;
           margin: 0 !important;
           padding: 0 !important;
           background: #ffffff !important;
           color: #000000 !important;
-          overflow: visible !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
 
-        /* 2. Kill GPU filters & backdrops */
-        *, *::before, *::after {
-          backdrop-filter: none !important;
-          -webkit-backdrop-filter: none !important;
-          filter: none !important;
-          box-shadow: none !important;
-          text-shadow: none !important;
-        }
-
-        /* 3. Hide non-receipt elements */
+        /* Hide non-receipt screen elements */
         body * {
-          visibility: hidden !important;
+          visibility: hidden;
         }
 
-        /* 4. Force receipt nodes to render */
+        /* Force receipt to render in a single continuous column */
         #printable-receipt,
         #printable-receipt * {
           visibility: visible !important;
           color: #000000 !important;
         }
 
-        /* 5. Anchor receipt with extra bottom feed padding (12mm) */
         #printable-receipt {
-          position: relative !important;
+          position: absolute !important;
           left: 0 !important;
           top: 0 !important;
           width: 58mm !important;
           max-width: 58mm !important;
-          padding: 2mm 3mm 12mm 3mm !important;
+          padding: 2mm 2mm 12mm 2mm !important;
           margin: 0 !important;
           box-sizing: border-box !important;
           background: #ffffff !important;
           display: block !important;
-          z-index: 999999 !important;
+          float: none !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
         }
 
-        /* 6. Hide action buttons */
         .print-hide,
         .print-hide * {
           display: none !important;
@@ -1628,11 +1618,11 @@ const handleDeleteProduct = (id: string) => {
             <div className="pr-1 min-w-0 flex-1">
               <p className="font-semibold truncate text-[10px] text-black">{item.name}</p>
               <p className="text-[9px] text-gray-600 print:text-black">
-                {item.quantity} x ₱{item.price.toFixed(2)}
+                {item.quantity} x P{item.price.toFixed(2)}
               </p>
             </div>
             <span className="font-bold whitespace-nowrap text-[10px] text-black">
-              ₱{(item.price * item.quantity).toFixed(2)}
+              P{(item.price * item.quantity).toFixed(2)}
             </span>
           </div>
         ))}
@@ -1643,24 +1633,24 @@ const handleDeleteProduct = (id: string) => {
         {receiptData.discount > 0 && (
           <div className="flex justify-between text-gray-800 print:text-black">
             <span>DISCOUNT:</span>
-            <span>-₱{receiptData.discount.toFixed(2)}</span>
+            <span>-P{receiptData.discount.toFixed(2)}</span>
           </div>
         )}
         {receiptData.serviceFee > 0 && (
           <div className="flex justify-between text-gray-800 print:text-black">
             <span>SERVICE FEE:</span>
-            <span>+₱{receiptData.serviceFee.toFixed(2)}</span>
+            <span>+P{receiptData.serviceFee.toFixed(2)}</span>
           </div>
         )}
         {receiptData.deliveryFee > 0 && (
           <div className="flex justify-between text-gray-800 print:text-black">
             <span>DELIVERY FEE:</span>
-            <span>+₱{receiptData.deliveryFee.toFixed(2)}</span>
+            <span>+P{receiptData.deliveryFee.toFixed(2)}</span>
           </div>
         )}
         <div className="flex justify-between font-bold text-xs pt-0.5 text-black">
           <span>TOTAL:</span>
-          <span>₱{receiptData.netSales.toFixed(2)}</span>
+          <span>P{receiptData.netSales.toFixed(2)}</span>
         </div>
         <div className="flex justify-between text-gray-800 print:text-black uppercase pt-0.5 text-[9px]">
           <span>PAYMENT:</span>
@@ -1671,11 +1661,11 @@ const handleDeleteProduct = (id: string) => {
           <>
             <div className="flex justify-between text-gray-800 print:text-black uppercase text-[9px]">
               <span>RECEIVED:</span>
-              <span>₱{(receiptData.cashReceived || 0).toFixed(2)}</span>
+              <span>P{(receiptData.cashReceived || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-gray-900 print:text-black uppercase font-bold text-[9px]">
               <span>CHANGE:</span>
-              <span>₱{(receiptData.changeDue || 0).toFixed(2)}</span>
+              <span>P{(receiptData.changeDue || 0).toFixed(2)}</span>
             </div>
           </>
         )}
@@ -1705,7 +1695,7 @@ const handleDeleteProduct = (id: string) => {
         <p className="text-gray-600 print:text-black">Please Come Again</p>
       </div>
 
-      {/* Bottom spacing buffer for thermal printer paper cut distance */}
+      {/* Paper Feed Buffer for Thermal Cut */}
       <div className="h-4 print:h-8" />
 
       {/* Screen Control Buttons */}
@@ -1724,8 +1714,164 @@ const handleDeleteProduct = (id: string) => {
         </button>
       </div>
     </div>
+      {/* Screen Control Buttons */}
+<div className="mt-3 flex flex-col sm:flex-row gap-2 print:hidden print-hide">
+  {/* Bluetooth Direct Print */}
+  <button
+    onClick={handleBluetoothPrint}
+    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1.5 text-xs transition"
+  >
+    <Bluetooth size={14} /> Direct BT Print
+  </button>
+
+  {/* Browser System Print fallback */}
+  <button
+    onClick={() => window.print()}
+    className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs transition"
+  >
+    <Printer size={14} /> Print
+  </button>
+
+  <button
+    onClick={() => setReceiptData(null)}
+    className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-xl font-sans font-semibold text-xs transition"
+  >
+    Close
+  </button>
+</div>
+
   </div>
 )}
+
+
     </div>
   );
 }
+const handleBluetoothPrint = async () => {
+  if (!receiptData) return;
+
+  if (!('bluetooth' in navigator)) {
+    alert('Web Bluetooth is not supported in this browser. Please use Chrome on Android or PC.');
+    return;
+  }
+
+  try {
+    // 1. Request access to nearby Bluetooth printers
+    const device = await (navigator as any).bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [
+        '000018f0-0000-1000-8000-00805f9b34fb', // Standard ESC/POS
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // Serial Port
+        'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
+      ]
+    });
+
+    // 2. Connect to GATT Server
+    const server = await device.gatt.connect();
+
+    // 3. Find Printable Service & Characteristic
+    const services = await server.getPrimaryServices();
+    let writeCharacteristic = null;
+
+    for (const service of services) {
+      const characteristics = await service.getCharacteristics();
+      for (const char of characteristics) {
+        if (char.properties.write || char.properties.writeWithoutResponse) {
+          writeCharacteristic = char;
+          break;
+        }
+      }
+      if (writeCharacteristic) break;
+    }
+
+    if (!writeCharacteristic) {
+      alert('Could not find a writeable channel on this Bluetooth device.');
+      return;
+    }
+
+    // 4. Build ESC/POS Raw Data Stream (32 character width for 58mm)
+    const encoder = new TextEncoder();
+    let esc = '';
+
+    // ESC/POS Command Constants
+    const INIT = '\x1B\x40';
+    const ALIGN_CENTER = '\x1B\x61\x01';
+    const ALIGN_LEFT = '\x1B\x61\x00';
+    const ALIGN_RIGHT = '\x1B\x61\x02';
+    const BOLD_ON = '\x1B\x45\x01';
+    const BOLD_OFF = '\x1B\x45\x00';
+    const LINE_FEED = '\n';
+
+    // Helper for 32-column formatted lines
+    const formatLine = (left: string, right: string) => {
+      const maxLen = 32;
+      const spaceLen = Math.max(1, maxLen - (left.length + right.length));
+      return left + ' '.repeat(spaceLen) + right + LINE_FEED;
+    };
+
+    // Build Receipt Content
+    esc += INIT;
+    esc += ALIGN_CENTER + BOLD_ON + 'INAKI STORE' + LINE_FEED + BOLD_OFF;
+    esc += new Date(receiptData.timestamp).toLocaleString('en-PH') + LINE_FEED;
+    esc += `Receipt #: ${receiptData.id}` + LINE_FEED;
+    esc += '--------------------------------' + LINE_FEED;
+
+    // Items
+    esc += ALIGN_LEFT;
+    receiptData.items.forEach((item) => {
+      const name = item.name.length > 20 ? item.name.substring(0, 18) + '..' : item.name;
+      const qtyPrice = `${item.quantity} x P${item.price.toFixed(2)}`;
+      const total = `P${(item.price * item.quantity).toFixed(2)}`;
+
+      esc += BOLD_ON + name + BOLD_OFF + LINE_FEED;
+      esc += formatLine(`  ${qtyPrice}`, total);
+    });
+
+    esc += '--------------------------------' + LINE_FEED;
+
+    // Totals
+    if (receiptData.discount > 0) {
+      esc += formatLine('DISCOUNT:', `-P${receiptData.discount.toFixed(2)}`);
+    }
+    if (receiptData.serviceFee > 0) {
+      esc += formatLine('SERVICE FEE:', `+P${receiptData.serviceFee.toFixed(2)}`);
+    }
+    if (receiptData.deliveryFee > 0) {
+      esc += formatLine('DELIVERY FEE:', `+P${receiptData.deliveryFee.toFixed(2)}`);
+    }
+
+    esc += BOLD_ON + formatLine('TOTAL:', `P${receiptData.netSales.toFixed(2)}`) + BOLD_OFF;
+    esc += formatLine('PAYMENT:', receiptData.paymentMethod.toUpperCase());
+
+    if (receiptData.paymentMethod === 'cash') {
+      esc += formatLine('RECEIVED:', `P${(receiptData.cashReceived || 0).toFixed(2)}`);
+      esc += formatLine('CHANGE:', `P${(receiptData.changeDue || 0).toFixed(2)}`);
+    } else if (receiptData.paymentMethod === 'gcash' && receiptData.gcashRefNumber) {
+      esc += formatLine('REF NO:', receiptData.gcashRefNumber);
+    }
+
+    if (receiptData.customer?.name) {
+      esc += '--------------------------------' + LINE_FEED;
+      esc += `Customer: ${receiptData.customer.name}` + LINE_FEED;
+    }
+
+    // Footer & Extra Feeds for Paper Tear
+    esc += '--------------------------------' + LINE_FEED;
+    esc += ALIGN_CENTER + BOLD_ON + 'Maraming Salamat Po!' + LINE_FEED + BOLD_OFF;
+    esc += 'Please Come Again' + LINE_FEED;
+    esc += LINE_FEED + LINE_FEED + LINE_FEED; // Feed paper
+
+    // 5. Send Chunked Bytes to Bluetooth Printer (20-byte MTU limit handling)
+    const data = encoder.encode(esc);
+    const chunkSize = 20;
+    for (let i = 0; i < data.length; i += chunkSize) {
+      const chunk = data.slice(i, i + chunkSize);
+      await writeCharacteristic.writeValue(chunk);
+    }
+
+    alert('Receipt printed successfully!');
+  } catch (error: any) {
+    console.error('Bluetooth Print Error:', error);
+    alert(`Bluetooth Print Failed: ${error.message || 'Device disconnected or cancelled'}`);
+  }
+};
