@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import CameraScanner from './CameraScanner';
  import { supabase } from '@/lib/supabase';
+ import { createPortal } from 'react-dom';
 import { db } from '@/lib/db';
 import {
   ShoppingCart,
@@ -1970,142 +1971,145 @@ const handleDeleteProduct = (id: string) => {
       )}
 
      {/* --- PAYMENT POP-UP MODAL --- */}
-      {isPaymentModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
-            {/* Modal Header */}
-            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
-              <div>
-                <h3 className="text-lg font-bold text-white">Process Payment</h3>
-                <p className="text-xs text-slate-400">Select payment method and complete order</p>
-              </div>
-              <button
-                onClick={() => setIsPaymentModalOpen(false)}
-                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition"
-              >
-                ✕
-              </button>
+{isPaymentModalOpen &&
+  createPortal(
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
+        {/* Modal Header */}
+        <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+          <div>
+            <h3 className="text-lg font-bold text-white">Process Payment</h3>
+            <p className="text-xs text-slate-400">Select payment method and complete order</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsPaymentModalOpen(false)}
+            className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Quick Adjustments */}
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const d = prompt('Enter discount amount (₱):', discount.toString());
+              if (d !== null) setDiscount(Number(d) || 0);
+            }}
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+          >
+            % Disc: ₱{discount}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const f = prompt('Enter extra fee (₱):', extraFee.toString());
+              if (f !== null) setExtraFee(Number(f) || 0);
+            }}
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+          >
+            🏷️ Fee: ₱{extraFee}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const del = prompt('Enter delivery fee (₱):', deliveryFee.toString());
+              if (del !== null) setDeliveryFee(Number(del) || 0);
+            }}
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+          >
+            🚚 Del: ₱{deliveryFee}
+          </button>
+        </div>
+
+        {/* Customer Info Toggle */}
+        <button
+          type="button"
+          onClick={() => {
+            const name = prompt('Customer Name:', customer.name || '');
+            if (name !== null) setCustomer((prev) => ({ ...prev, name }));
+          }}
+          className="text-fuchsia-400 hover:text-fuchsia-300 text-xs font-bold flex items-center gap-1.5"
+        >
+          👤 {customer.name ? `Customer: ${customer.name}` : '+ Attach Customer Info'}
+        </button>
+
+        {/* Payment Method Switcher */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('cash')}
+            className={`py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${
+              paymentMethod === 'cash'
+                ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+                : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            💵 Cash
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('gcash')}
+            className={`py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${
+              paymentMethod === 'gcash'
+                ? 'bg-blue-500/10 border-blue-500 text-blue-400'
+                : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            💳 GCash
+          </button>
+        </div>
+
+        {/* Cash Input & Change Calculation */}
+        {paymentMethod === 'cash' && (
+          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+            <div className="flex justify-between items-center text-xs text-slate-400">
+              <span>Cash Tendered:</span>
+              <span className="font-mono text-emerald-400 font-bold">
+                Change: ₱{Math.max(0, cashTendered - netTotal).toFixed(2)}
+              </span>
             </div>
+            <input
+              type="number"
+              placeholder="0.00"
+              value={cashTendered || ''}
+              onChange={(e) => setCashTendered(Number(e.target.value))}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-emerald-400 font-mono font-bold text-xl focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+        )}
 
-            {/* Quick Adjustments */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const d = prompt('Enter discount amount (₱):', discount.toString());
-                  if (d !== null) setDiscount(Number(d) || 0);
-                }}
-                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
-              >
-                % Disc: ₱{discount}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const f = prompt('Enter extra fee (₱):', extraFee.toString());
-                  if (f !== null) setExtraFee(Number(f) || 0);
-                }}
-                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
-              >
-                🏷️ Fee: ₱{extraFee}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const del = prompt('Enter delivery fee (₱):', deliveryFee.toString());
-                  if (del !== null) setDeliveryFee(Number(del) || 0);
-                }}
-                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
-              >
-                🚚 Del: ₱{deliveryFee}
-              </button>
-            </div>
-
-          {/* Customer Info Toggle in Payment Modal */}
-            <button
-              type="button"
-             onClick={() => {
-                const name = prompt('Customer Name:', customer.name || '');
-                if (name !== null) setCustomer((prev) => ({ ...prev, name }));
-              }}
-              className="text-fuchsia-400 hover:text-fuchsia-300 text-xs font-bold flex items-center gap-1.5"
-            >
-              👤 {customer.name ? `Customer: ${customer.name}` : '+ Attach Customer Info'}
-            </button>
-
-            {/* Payment Method Switcher */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('cash')}
-                className={`py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${
-                  paymentMethod === 'cash'
-                    ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
-                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                💵 Cash
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('gcash')}
-                className={`py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${
-                  paymentMethod === 'gcash'
-                    ? 'bg-blue-500/10 border-blue-500 text-blue-400'
-                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                💳 GCash
-              </button>
-            </div>
-
-            {/* Cash Input & Change Calculation */}
-            {paymentMethod === 'cash' && (
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                <div className="flex justify-between items-center text-xs text-slate-400">
-                  <span>Cash Tendered:</span>
-                  <span className="font-mono text-emerald-400 font-bold">
-                    Change: ₱{Math.max(0, cashTendered - netTotal).toFixed(2)}
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  value={cashTendered || ''}
-                  onChange={(e) => setCashTendered(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-emerald-400 font-mono font-bold text-xl focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            )}
-
-            {/* Summary Totals */}
-            <div className="border-t border-slate-800 pt-4 space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-400">
-                <span>Subtotal</span>
-                <span className="font-mono text-slate-200">₱{subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-base font-black">
-                <span className="text-white">NET TOTAL</span>
-                <span className="font-mono text-fuchsia-400 text-xl">₱{netTotal.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Final Checkout Button */}
-            <button
-              type="button"
-              onClick={handleCompleteTransaction}
-              disabled={paymentMethod === 'cash' && cashTendered < netTotal}
-              className={`w-full py-4 rounded-2xl font-bold text-sm uppercase tracking-wider transition shadow-lg ${
-                paymentMethod === 'cash' && cashTendered < netTotal
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
-              }`}
-            >
-              Confirm & Generate Receipt
-            </button>
+        {/* Summary Totals */}
+        <div className="border-t border-slate-800 pt-4 space-y-1.5 text-xs">
+          <div className="flex justify-between text-slate-400">
+            <span>Subtotal</span>
+            <span className="font-mono text-slate-200">₱{subtotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-base font-black">
+            <span className="text-white">NET TOTAL</span>
+            <span className="font-mono text-fuchsia-400 text-xl">₱{netTotal.toFixed(2)}</span>
           </div>
         </div>
-      )}
+
+        {/* Final Checkout Button */}
+        <button
+          type="button"
+          onClick={handleCompleteTransaction}
+          disabled={paymentMethod === 'cash' && cashTendered < netTotal}
+          className={`w-full py-4 rounded-2xl font-bold text-sm uppercase tracking-wider transition shadow-lg ${
+            paymentMethod === 'cash' && cashTendered < netTotal
+              ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
+          }`}
+        >
+          Confirm & Generate Receipt
+        </button>
+      </div>
+    </div>,
+    document.body
+  )}
 
         {/* Printable Receipt Modal */}
         {receiptData && (
