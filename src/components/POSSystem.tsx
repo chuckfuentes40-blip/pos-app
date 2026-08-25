@@ -71,13 +71,15 @@ export interface Transaction {
   id: string;
   timestamp: string;
   items: CartItem[];
-  subtotal: number;
-  discount: number;
-  serviceFee: number;
-  deliveryFee: number;
+  subtotal?: number;
+  discount?: number;
+  serviceFee?: number;
+  deliveryFee?: number;
   netSales: number;
   paymentMethod: 'cash' | 'gcash';
+  cashTendered?: number;
   cashReceived?: number;
+  change?: number;
   changeDue?: number;
   gcashRefNumber?: string;
   customer?: Customer;
@@ -163,15 +165,18 @@ export default function POSSystem() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
-  // Order Modifiers
+  // Order Modifiers & Fees State
+  const [discount, setDiscount] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [serviceFee, setServiceFee] = useState<number>(0);
+  const [extraFee, setExtraFee] = useState<number>(0);
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [activeFeeModal, setActiveFeeModal] = useState<'discount' | 'service' | 'delivery' | null>(null);
   const [feeInputValue, setFeeInputValue] = useState<string>('');
 
   // Payment State
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash'>('cash');
+  const [cashTendered, setCashTendered] = useState<number>(0);
   const [cashReceived, setCashReceived] = useState<string>('');
   const [gcashRefNumber, setGcashRefNumber] = useState<string>('');
 
@@ -179,23 +184,56 @@ export default function POSSystem() {
   const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', address: '', notes: '' });
   const [showCustomerFields, setShowCustomerFields] = useState<boolean>(false);
 
-  // Modals and Camera
+  // Modals, Receipts & Camera
   const [isPosCameraOpen, setIsPosCameraOpen] = useState(false);
   const [isInlineScanning, setIsInlineScanning] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-
-  // Product Form state
-  const [formName, setFormName] = useState('');
-  const [formPrice, setFormPrice] = useState('');
-  const [formCost, setFormCost] = useState('');
-  const [formStock, setFormStock] = useState('');
-  const [formLowStock, setFormLowStock] = useState('5');
-  const [formUnit, setFormUnit] = useState('pcs');
-  const [formBarcode, setFormBarcode] = useState('');
-
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
+
+  // Product Form State
+  const [formName, setFormName] = useState<string>('');
+  const [formPrice, setFormPrice] = useState<string>('');
+  const [formCost, setFormCost] = useState<string>('');
+  const [formStock, setFormStock] = useState<string>('');
+  const [formLowStock, setFormLowStock] = useState<string>('5');
+  const [formUnit, setFormUnit] = useState<string>('pcs');
+  const [formBarcode, setFormBarcode] = useState<string>('');
+
+// Calculations
+  const subtotal = cart.reduce(
+    (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+    0
+  );
+  const effectiveDiscount = discountAmount || discount;
+  const effectiveServiceFee = serviceFee || extraFee;
+
+  const netTotal = Math.max(0, subtotal - effectiveDiscount + effectiveServiceFee + deliveryFee);
+  0
+
+  
+  // Complete Transaction Handler
+  const handleCompleteTransaction = () => {
+    const newTx: Transaction = {
+      id: `TRX-${Math.floor(10000 + Math.random() * 90000)}`,
+      timestamp: new Date().toISOString(),
+      items: [...cart],
+      netSales: netTotal,
+      paymentMethod: paymentMethod,
+      cashTendered: paymentMethod === 'cash' ? cashTendered : netTotal,
+      change: paymentMethod === 'cash' ? Math.max(0, cashTendered - netTotal) : 0,
+    };
+
+    setTransactions((prev) => [newTx, ...prev]);
+    setReceiptData(newTx);
+    setIsPaymentModalOpen(false);
+    setCart([]);
+    setCashTendered(0);
+    setDiscount(0);
+    setExtraFee(0);
+    setDeliveryFee(0);
+  };
   // ✅ PLACE IT HERE (Inside POSSystem, after state definitions)
   const handleOpenProductModal = (product?: Product) => {
     if (product) {
@@ -507,7 +545,6 @@ useEffect(() => {
   };
 
   // Cart Calculations
-  const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const netSales = Math.max(0, subtotal - discountAmount + serviceFee + deliveryFee);
   const parsedCash = parseFloat(cashReceived) || 0;
   const changeDue = Math.max(0, parsedCash - netSales);
@@ -1268,7 +1305,18 @@ const handleDeleteProduct = (id: string) => {
                       </div>
                     </div>
 
-                    {/* Complete Payment Button */}
+                    {/* Right Sidebar Footer */}
+                  <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3">
+                    <div className="flex justify-between items-center text-xs font-semibold text-slate-400">
+                      <span>Subtotal</span>
+                      <span className="font-mono text-slate-200">₱{subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm font-black">
+                      <span className="text-white">NET TOTAL</span>
+                      <span className="font-mono text-fuchsia-400 text-lg">₱{netTotal.toFixed(2)}</span>
+                    </div>
+
+                    {/* Open Payment Modal Button */}
                     <button
                       type="button"
                       onClick={() => setIsPaymentModalOpen(true)}
@@ -1279,8 +1327,108 @@ const handleDeleteProduct = (id: string) => {
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
                     >
-                      COMPLETE PAYMENT 
+                      COMPLETE PAYMENT
                     </button>
+                  </div>
+
+                      {/* --- RECEIPT MODAL --- */}
+                      {receiptData && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full flex flex-col items-center animate-in fade-in zoom-in-95">
+                            
+                            {/* White Thermal Receipt Container */}
+                            <div className="bg-white text-slate-900 font-mono text-[11px] p-5 rounded-2xl w-full shadow-inner space-y-3">
+                              {/* Receipt Header */}
+                              <div className="text-center space-y-1">
+                                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold mx-auto mb-1">
+                                  🏪
+                                </div>
+                                <h4 className="font-black text-sm uppercase tracking-tight">IÑAKI STORE</h4>
+                                <p className="text-[10px] text-slate-500">
+                                  {new Date(receiptData.timestamp).toLocaleString()}
+                                </p>
+                                <p className="text-[10px] text-slate-500">Receipt #: {receiptData.id}</p>
+                              </div>
+
+                              <div className="border-b border-dashed border-slate-300 my-2" />
+
+                              {/* Items List */}
+                              <div className="space-y-1.5">
+                                {receiptData.items?.map((item: any, idx: number) => (
+                                  <div key={idx} className="flex justify-between items-start">
+                                    <div>
+                                      <p className="font-bold">{item.name}</p>
+                                      <p className="text-[10px] text-slate-500">
+                                        {item.quantity} x ₱{item.price.toFixed(2)}
+                                      </p>
+                                    </div>
+                                    <span className="font-bold">₱{(item.quantity * item.price).toFixed(2)}</span>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="border-b border-dashed border-slate-300 my-2" />
+
+                              {/* Totals Summary */}
+                              <div className="space-y-1 text-xs">
+                                <div className="flex justify-between font-black text-sm">
+                                  <span>TOTAL :</span>
+                                  <span>₱{receiptData.netSales.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-slate-600">
+                                  <span>PAYMENT:</span>
+                                  <span className="uppercase">{receiptData.paymentMethod}</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-slate-600">
+                                  <span>RECEIVED:</span>
+                                  <span>₱{(receiptData.cashTendered || receiptData.netSales).toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-slate-600">
+                                  <span>CHANGE:</span>
+                                  <span>₱{(receiptData.change || 0).toFixed(2)}</span>
+                                </div>
+                              </div>
+
+                              <div className="border-b border-dashed border-slate-300 my-2" />
+
+                              {/* Footer Note */}
+                              <div className="text-center text-[10px] text-slate-500 font-sans pt-1">
+                                <p className="font-bold">MARAMING SALAMAT PO!</p>
+                                <p>Please Come Again</p>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center justify-center gap-2 mt-5 w-full">
+                              <button
+                                type="button"
+                                onClick={() => alert('Direct Bluetooth Printing...')}
+                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-blue-600/30"
+                              >
+                                <span>📶</span> Direct BT Print
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => window.print()}
+                                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-fuchsia-600/30"
+                              >
+                                <span>🖨️</span> Print
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReceiptData(null);
+                                  setIsPaymentModalOpen(false);
+                                }}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl transition"
+                              >
+                                Close
+                              </button>
+                            </div>
+
+                          </div>
+                        </div>
+                      )}
                   </div>
                 </div>
                 </div>
@@ -1954,195 +2102,333 @@ const handleDeleteProduct = (id: string) => {
         </div>
       )}
 
-{/* Printable Receipt Modal */}
-{receiptData && (
-  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block overflow-y-auto">
-    {/* Thermal Print Stylesheet for 58mm Continuous Roll */}
-    <style>{`
-      @media print {
-        @page {
-          size: 58mm auto;
-          margin: 0mm !important;
-        }
-        html, body {
-          width: 58mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          background: #ffffff !important;
-          color: #000000 !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-
-        /* Hide non-receipt screen elements */
-        body * {
-          visibility: hidden;
-        }
-
-        /* Force receipt to render in a single continuous column */
-        #printable-receipt,
-        #printable-receipt * {
-          visibility: visible !important;
-          color: #000000 !important;
-        }
-
-        #printable-receipt {
-          position: absolute !important;
-          left: 0 !important;
-          top: 0 !important;
-          width: 58mm !important;
-          max-width: 58mm !important;
-          padding: 2mm 2mm 12mm 2mm !important;
-          margin: 0 !important;
-          box-sizing: border-box !important;
-          background: #ffffff !important;
-          display: block !important;
-          float: none !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-
-        .print-hide,
-        .print-hide * {
-          display: none !important;
-          visibility: hidden !important;
-        }
-      }
-    `}</style>
-
-    <div
-      id="printable-receipt"
-      className="bg-white text-black p-4 rounded-2xl w-full max-w-[280px] shadow-2xl font-mono text-[11px] leading-tight print:shadow-none print:w-[58mm] print:max-w-[58mm] print:rounded-none print:text-black print:p-0 mx-auto"
-    >
-      {/* Header */}
-      <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
-       <img
-          src="/Inaki.png"
-          alt="IÑAKI Logo"
-          className="h-8 w-8 mx-auto rounded-lg object-cover mb-1 border border-gray-200 print:border-none"
-        />
-        <h2 className="font-extrabold text-xs tracking-wider uppercase text-black">IÑAKI STORE</h2>
-        <p className="text-[9px] text-gray-600 print:text-black">{new Date(receiptData.timestamp).toLocaleString('en-PH')}</p>
-        <p className="text-[9px] font-bold text-gray-800 print:text-black">Receipt #: {receiptData.id}</p>
-      </div>
-
-      {/* Item List */}
-      <div className="py-2 border-b border-dashed border-gray-400 space-y-1">
-        {receiptData.items.map((item) => (
-          <div key={item.id} className="flex justify-between items-start">
-            <div className="pr-1 min-w-0 flex-1">
-              <p className="font-semibold truncate text-[10px] text-black">{item.name}</p>
-              <p className="text-[9px] text-gray-600 print:text-black">
-                {item.quantity} x P{item.price.toFixed(2)}
-              </p>
+     {/* --- PAYMENT POP-UP MODAL --- */}
+      {isPaymentModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Process Payment</h3>
+                <p className="text-xs text-slate-400">Select payment method and complete order</p>
+              </div>
+              <button
+                onClick={() => setIsPaymentModalOpen(false)}
+                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition"
+              >
+                ✕
+              </button>
             </div>
-            <span className="font-bold whitespace-nowrap text-[10px] text-black">
-              P{(item.price * item.quantity).toFixed(2)}
-            </span>
-          </div>
-        ))}
-      </div>
 
-      {/* Fees & Summary */}
-      <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
-        {receiptData.discount > 0 && (
-          <div className="flex justify-between text-gray-800 print:text-black">
-            <span>DISCOUNT:</span>
-            <span>-P{receiptData.discount.toFixed(2)}</span>
-          </div>
-        )}
-        {receiptData.serviceFee > 0 && (
-          <div className="flex justify-between text-gray-800 print:text-black">
-            <span>SERVICE FEE:</span>
-            <span>+P{receiptData.serviceFee.toFixed(2)}</span>
-          </div>
-        )}
-        {receiptData.deliveryFee > 0 && (
-          <div className="flex justify-between text-gray-800 print:text-black">
-            <span>DELIVERY FEE:</span>
-            <span>+P{receiptData.deliveryFee.toFixed(2)}</span>
-          </div>
-        )}
-        <div className="flex justify-between font-bold text-xs pt-0.5 text-black">
-          <span>TOTAL:</span>
-          <span>P{receiptData.netSales.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-gray-800 print:text-black uppercase pt-0.5 text-[9px]">
-          <span>PAYMENT:</span>
-          <span className="font-bold">{receiptData.paymentMethod}</span>
-        </div>
-
-        {receiptData.paymentMethod === 'cash' && (
-          <>
-            <div className="flex justify-between text-gray-800 print:text-black uppercase text-[9px]">
-              <span>RECEIVED:</span>
-              <span>P{(receiptData.cashReceived || 0).toFixed(2)}</span>
+            {/* Quick Adjustments */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = prompt('Enter discount amount (₱):', discount.toString());
+                  if (d !== null) setDiscount(Number(d) || 0);
+                }}
+                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+              >
+                % Disc: ₱{discount}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const f = prompt('Enter extra fee (₱):', extraFee.toString());
+                  if (f !== null) setExtraFee(Number(f) || 0);
+                }}
+                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+              >
+                🏷️ Fee: ₱{extraFee}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const del = prompt('Enter delivery fee (₱):', deliveryFee.toString());
+                  if (del !== null) setDeliveryFee(Number(del) || 0);
+                }}
+                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-semibold transition"
+              >
+                🚚 Del: ₱{deliveryFee}
+              </button>
             </div>
-            <div className="flex justify-between text-gray-900 print:text-black uppercase font-bold text-[9px]">
-              <span>CHANGE:</span>
-              <span>P{(receiptData.changeDue || 0).toFixed(2)}</span>
+
+          {/* Customer Info Toggle in Payment Modal */}
+            <button
+              type="button"
+             onClick={() => {
+                const name = prompt('Customer Name:', customer.name || '');
+                if (name !== null) setCustomer((prev) => ({ ...prev, name }));
+              }}
+              className="text-fuchsia-400 hover:text-fuchsia-300 text-xs font-bold flex items-center gap-1.5"
+            >
+              👤 {customer.name ? `Customer: ${customer.name}` : '+ Attach Customer Info'}
+            </button>
+
+            {/* Payment Method Switcher */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('cash')}
+                className={`py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${
+                  paymentMethod === 'cash'
+                    ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                💵 Cash
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('gcash')}
+                className={`py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${
+                  paymentMethod === 'gcash'
+                    ? 'bg-blue-500/10 border-blue-500 text-blue-400'
+                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                💳 GCash
+              </button>
             </div>
-          </>
-        )}
 
-        {receiptData.paymentMethod === 'gcash' && receiptData.gcashRefNumber && (
-          <div className="flex justify-between text-gray-800 print:text-black uppercase text-[9px]">
-            <span>REF NO:</span>
-            <span>{receiptData.gcashRefNumber}</span>
+            {/* Cash Input & Change Calculation */}
+            {paymentMethod === 'cash' && (
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                <div className="flex justify-between items-center text-xs text-slate-400">
+                  <span>Cash Tendered:</span>
+                  <span className="font-mono text-emerald-400 font-bold">
+                    Change: ₱{Math.max(0, cashTendered - netTotal).toFixed(2)}
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={cashTendered || ''}
+                  onChange={(e) => setCashTendered(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-emerald-400 font-mono font-bold text-xl focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            )}
+
+            {/* Summary Totals */}
+            <div className="border-t border-slate-800 pt-4 space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-400">
+                <span>Subtotal</span>
+                <span className="font-mono text-slate-200">₱{subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-base font-black">
+                <span className="text-white">NET TOTAL</span>
+                <span className="font-mono text-fuchsia-400 text-xl">₱{netTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Final Checkout Button */}
+            <button
+              type="button"
+              onClick={handleCompleteTransaction}
+              disabled={paymentMethod === 'cash' && cashTendered < netTotal}
+              className={`w-full py-4 rounded-2xl font-bold text-sm uppercase tracking-wider transition shadow-lg ${
+                paymentMethod === 'cash' && cashTendered < netTotal
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
+              }`}
+            >
+              Confirm & Generate Receipt
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* Customer Info */}
-      {receiptData.customer && (
-        <div className="py-1.5 border-b border-dashed border-gray-400 text-[9px] space-y-0.5 text-black">
-          <p className="font-bold">Customer Info:</p>
-          {receiptData.customer.name && <p>Name: {receiptData.customer.name}</p>}
-          {receiptData.customer.phone && <p>Phone: {receiptData.customer.phone}</p>}
-          {receiptData.customer.address && <p>Address: {receiptData.customer.address}</p>}
-          {receiptData.customer.notes && <p>Notes: {receiptData.customer.notes}</p>}
         </div>
       )}
 
-      {/* Footer */}
-      <div className="pt-2 text-center text-[9px] space-y-0.5 text-black">
-        <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
-        <p className="text-gray-600 print:text-black">Please Come Again</p>
-      </div>
+        {/* Printable Receipt Modal */}
+        {receiptData && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block overflow-y-auto">
+            {/* Thermal Print Stylesheet for 58mm Continuous Roll */}
+            <style>{`
+              @media print {
+                @page {
+                  size: 58mm auto;
+                  margin: 0mm !important;
+                }
+                html, body {
+                  width: 58mm !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  background: #ffffff !important;
+                  color: #000000 !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
 
-      {/* Paper Feed Buffer for Thermal Cut */}
-      <div className="h-4 print:h-8" />
+                /* Hide non-receipt screen elements */
+                body * {
+                  visibility: hidden;
+                }
 
-    {/* Screen Control Buttons */}
-<div className="mt-3 flex flex-col sm:flex-row gap-2 print:hidden print-hide">
-  {/* Direct Bluetooth Print */}
-  <button
-    onClick={handleBluetoothPrint}
-    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1.5 text-xs transition"
-  >
-    <Bluetooth size={14} /> Direct BT Print
-  </button>
+                /* Force receipt to render in a single continuous column */
+                #printable-receipt,
+                #printable-receipt * {
+                  visibility: visible !important;
+                  color: #000000 !important;
+                }
 
-  {/* Standard Browser System Print */}
-  <button
-    onClick={() => window.print()}
-    className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs transition"
-  >
-    <Printer size={14} /> Print
-  </button>
+                #printable-receipt {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 58mm !important;
+                  max-width: 58mm !important;
+                  padding: 2mm 2mm 12mm 2mm !important;
+                  margin: 0 !important;
+                  box-sizing: border-box !important;
+                  background: #ffffff !important;
+                  display: block !important;
+                  float: none !important;
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
+                }
 
-  {/* Close Modal */}
-  <button
-    onClick={() => setReceiptData(null)}
-    className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-xl font-sans font-semibold text-xs transition"
-  >
-    Close
-  </button>
-</div>
-    </div>
+                .print-hide,
+                .print-hide * {
+                  display: none !important;
+                  visibility: hidden !important;
+                }
+              }
+            `}</style>
 
-  </div>
-)}
+            <div
+              id="printable-receipt"
+              className="bg-white text-black p-4 rounded-2xl w-full max-w-[280px] shadow-2xl font-mono text-[11px] leading-tight print:shadow-none print:w-[58mm] print:max-w-[58mm] print:rounded-none print:text-black print:p-0 mx-auto"
+            >
+              {/* Header */}
+              <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
+              <img
+                  src="/Inaki.png"
+                  alt="IÑAKI Logo"
+                  className="h-8 w-8 mx-auto rounded-lg object-cover mb-1 border border-gray-200 print:border-none"
+                />
+                <h2 className="font-extrabold text-xs tracking-wider uppercase text-black">IÑAKI STORE</h2>
+                <p className="text-[9px] text-gray-600 print:text-black">{new Date(receiptData.timestamp).toLocaleString('en-PH')}</p>
+                <p className="text-[9px] font-bold text-gray-800 print:text-black">Receipt #: {receiptData.id}</p>
+              </div>
+
+              {/* Item List */}
+              <div className="py-2 border-b border-dashed border-gray-400 space-y-1">
+                {receiptData.items.map((item) => (
+                  <div key={item.id} className="flex justify-between items-start">
+                    <div className="pr-1 min-w-0 flex-1">
+                      <p className="font-semibold truncate text-[10px] text-black">{item.name}</p>
+                      <p className="text-[9px] text-gray-600 print:text-black">
+                        {item.quantity} x P{item.price.toFixed(2)}
+                      </p>
+                    </div>
+                    <span className="font-bold whitespace-nowrap text-[10px] text-black">
+                      P{(item.price * item.quantity).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Fees & Summary */}
+              <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
+                {receiptData.discount > 0 && (
+                  <div className="flex justify-between text-gray-800 print:text-black">
+                    <span>DISCOUNT:</span>
+                    <span>-P{receiptData.discount.toFixed(2)}</span>
+                  </div>
+                )}
+                {receiptData.serviceFee > 0 && (
+                  <div className="flex justify-between text-gray-800 print:text-black">
+                    <span>SERVICE FEE:</span>
+                    <span>+P{receiptData.serviceFee.toFixed(2)}</span>
+                  </div>
+                )}
+                {receiptData.deliveryFee > 0 && (
+                  <div className="flex justify-between text-gray-800 print:text-black">
+                    <span>DELIVERY FEE:</span>
+                    <span>+P{receiptData.deliveryFee.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-xs pt-0.5 text-black">
+                  <span>TOTAL:</span>
+                  <span>P{receiptData.netSales.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-800 print:text-black uppercase pt-0.5 text-[9px]">
+                  <span>PAYMENT:</span>
+                  <span className="font-bold">{receiptData.paymentMethod}</span>
+                </div>
+
+                {receiptData.paymentMethod === 'cash' && (
+                  <>
+                    <div className="flex justify-between text-gray-800 print:text-black uppercase text-[9px]">
+                      <span>RECEIVED:</span>
+                      <span>P{(receiptData.cashReceived || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-900 print:text-black uppercase font-bold text-[9px]">
+                      <span>CHANGE:</span>
+                      <span>P{(receiptData.changeDue || 0).toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
+
+                {receiptData.paymentMethod === 'gcash' && receiptData.gcashRefNumber && (
+                  <div className="flex justify-between text-gray-800 print:text-black uppercase text-[9px]">
+                    <span>REF NO:</span>
+                    <span>{receiptData.gcashRefNumber}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Customer Info */}
+              {receiptData.customer && (
+                <div className="py-1.5 border-b border-dashed border-gray-400 text-[9px] space-y-0.5 text-black">
+                  <p className="font-bold">Customer Info:</p>
+                  {receiptData.customer.name && <p>Name: {receiptData.customer.name}</p>}
+                  {receiptData.customer.phone && <p>Phone: {receiptData.customer.phone}</p>}
+                  {receiptData.customer.address && <p>Address: {receiptData.customer.address}</p>}
+                  {receiptData.customer.notes && <p>Notes: {receiptData.customer.notes}</p>}
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="pt-2 text-center text-[9px] space-y-0.5 text-black">
+                <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
+                <p className="text-gray-600 print:text-black">Please Come Again</p>
+              </div>
+
+              {/* Paper Feed Buffer for Thermal Cut */}
+              <div className="h-4 print:h-8" />
+
+            {/* Screen Control Buttons */}
+        <div className="mt-3 flex flex-col sm:flex-row gap-2 print:hidden print-hide">
+          {/* Direct Bluetooth Print */}
+          <button
+            onClick={handleBluetoothPrint}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1.5 text-xs transition"
+          >
+            <Bluetooth size={14} /> Direct BT Print
+          </button>
+
+          {/* Standard Browser System Print */}
+          <button
+            onClick={() => window.print()}
+            className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white py-2 px-3 rounded-xl font-sans font-bold flex items-center justify-center gap-1 text-xs transition"
+          >
+            <Printer size={14} /> Print
+          </button>
+
+          {/* Close Modal */}
+          <button
+            onClick={() => setReceiptData(null)}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-xl font-sans font-semibold text-xs transition"
+          >
+            Close
+          </button>
+        </div>
+            </div>
+
+          </div>
+        )}
 
 
 
