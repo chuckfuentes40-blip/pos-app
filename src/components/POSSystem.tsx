@@ -1238,64 +1238,6 @@ const handleDeleteProduct = (id: string) => {
                     </div>
                   )}
 
-                  {/* Right Sidebar - Cart & Total */}
-                <div className="w-80 bg-slate-900 border-l border-slate-800 flex flex-col h-full">
-                  {/* Header */}
-                  <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                    <h2 className="font-bold text-sm text-white flex items-center gap-2">
-                      <ShoppingCart size={16} className="text-fuchsia-500" />
-                      Current Order
-                    </h2>
-                    {cart.length > 0 && (
-                      <button
-                        onClick={() => setCart([])}
-                        className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase transition"
-                      >
-                        Clear Cart
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Cart Items List */}
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                    {cart.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs">
-                        <ShoppingCart size={32} className="mb-2 opacity-30" />
-                        <p>Cart is empty</p>
-                        <p className="text-[10px] text-slate-600">Select items from catalog to build order</p>
-                      </div>
-                    ) : (
-                      cart.map((item) => (
-                        <div
-                          key={item.id}
-                          className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/60 flex justify-between items-center text-xs"
-                        >
-                          <div className="flex-1 min-w-0 pr-2">
-                            <p className="font-bold text-slate-200 truncate">{item.name}</p>
-                            <p className="text-[10px] text-slate-400 font-mono">
-                              ₱{item.price.toFixed(2)} × {item.quantity}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
-                            >
-                              -
-                            </button>
-                            <span className="font-mono text-xs text-white px-1">{item.quantity}</span>
-                            <button
-                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
                   {/* Sidebar Controls & Total */}
                   <div className="p-3 bg-slate-950 border-t border-slate-800 space-y-3">
                     {/* Discount & Fee Quick Action Buttons */}
@@ -1403,7 +1345,6 @@ const handleDeleteProduct = (id: string) => {
                 </div>
                 </div>
               </div>
-            </div>
           )}
 
           {/* 2. Inventory Tab */}
