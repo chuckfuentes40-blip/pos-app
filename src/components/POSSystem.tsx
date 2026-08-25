@@ -79,13 +79,15 @@ export interface ReceiptData {
   };
 }
 
-// --- ESC/POS BUFFER BUILDER WITH CASHBOX TRIGGER ---
-const buildEscPosReceiptBuffer = (receipt: ReceiptData, triggerCashbox: boolean = true): Uint8Array => {
+const buildEscPosReceiptBuffer = (receipt: any, triggerCashbox: boolean = true): Uint8Array => {
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [];
 
   const addBytes = (bytes: number[]) => chunks.push(new Uint8Array(bytes));
   const addText = (text: string) => chunks.push(encoder.encode(text));
+
+  const cashTendered = receipt.cashTendered ?? receipt.cashReceived ?? 0;
+  const change = receipt.change ?? receipt.changeDue ?? 0;
 
   // 1. Reset / Initialize Printer (ESC @)
   addBytes([0x1b, 0x40]);
@@ -93,7 +95,7 @@ const buildEscPosReceiptBuffer = (receipt: ReceiptData, triggerCashbox: boolean 
   // 2. Header (Centered, Bold)
   addBytes([0x1b, 0x61, 0x01]); // Center
   addBytes([0x1b, 0x45, 0x01]); // Bold ON
-  addText("INAKI STORE\n");
+  addText("IÑAKI STORE\n");
   addBytes([0x1b, 0x45, 0x00]); // Bold OFF
   addText(`${new Date(receipt.timestamp).toLocaleString('en-PH')}\n`);
   addText(`Receipt #: ${receipt.id}\n`);
@@ -101,7 +103,7 @@ const buildEscPosReceiptBuffer = (receipt: ReceiptData, triggerCashbox: boolean 
 
   // 3. Item List (Left Aligned)
   addBytes([0x1b, 0x61, 0x00]); // Left
-  receipt.items.forEach((item) => {
+  receipt.items.forEach((item: any) => {
     addText(`${item.name}\n`);
     const line = `  ${item.quantity} x P${item.price.toFixed(2)}`.padEnd(22) + `P${(item.price * item.quantity).toFixed(2)}\n`;
     addText(line);
@@ -113,19 +115,21 @@ const buildEscPosReceiptBuffer = (receipt: ReceiptData, triggerCashbox: boolean 
   addText(`NET TOTAL: P${receipt.netSales.toFixed(2)}\n`);
   addBytes([0x1b, 0x45, 0x00]);
   addText(`Payment Method: ${receipt.paymentMethod.toUpperCase()}\n`);
+
+  if (receipt.paymentMethod === 'cash') {
+    addText(`Cash Tendered: P${cashTendered.toFixed(2)}\n`);
+    addText(`Change Due: P${change.toFixed(2)}\n`);
+  }
+
   if (receipt.gcashRefNumber) {
     addText(`GCash Ref: ${receipt.gcashRefNumber}\n`);
-  }
-  if (receipt.paymentMethod === 'cash' && receipt.cashReceived) {
-    addText(`Cash Tendered: P${receipt.cashReceived.toFixed(2)}\n`);
-    addText(`Change Due: P${(receipt.changeDue || 0).toFixed(2)}\n`);
   }
 
   // 5. Footer
   addBytes([0x1b, 0x61, 0x01]); // Center
   addText("\nMaraming Salamat Po!\nPlease Come Again\n\n\n");
 
-  // 6. Cash Drawer Kick Command (ESC p m t1 t2) -> Pin 2 Pulse
+  // 6. Cash Drawer Kick Command (ESC p m t1 t2)
   if (triggerCashbox) {
     addBytes([0x1b, 0x70, 0x00, 0x19, 0xfa]);
   }
@@ -1312,72 +1316,105 @@ export default function POSSystem() {
         )}
 
       {/* --- RECEIPT MODAL --- */}
-      {receiptData && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block overflow-y-auto">
-          <style>{`
-            @media print {
-              @page { size: 58mm auto; margin: 0mm !important; }
-              html, body { width: 58mm !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; color: #000000 !important; }
-              body * { visibility: hidden; }
-              #printable-receipt, #printable-receipt * { visibility: visible !important; color: #000000 !important; }
-              #printable-receipt { position: absolute !important; left: 0 !important; top: 0 !important; width: 58mm !important; max-width: 58mm !important; padding: 2mm !important; margin: 0 !important; background: #ffffff !important; }
-              .print-hide { display: none !important; }
-            }
-          `}</style>
+        {receiptData && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:static print:block overflow-y-auto">
+            <style>{`
+              @media print {
+                @page { size: 58mm auto; margin: 0mm !important; }
+                html, body { width: 58mm !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; color: #000000 !important; }
+                body * { visibility: hidden; }
+                #printable-receipt, #printable-receipt * { visibility: visible !important; color: #000000 !important; }
+                #printable-receipt { position: absolute !important; left: 0 !important; top: 0 !important; width: 58mm !important; max-width: 58mm !important; padding: 2mm !important; margin: 0 !important; background: #ffffff !important; }
+                .print-hide { display: none !important; }
+              }
+            `}</style>
 
-          <div id="printable-receipt" className="bg-white text-black p-4 rounded-2xl w-full max-w-[280px] shadow-2xl font-mono text-[11px] leading-tight print:shadow-none print:w-[58mm] print:max-w-[58mm] print:rounded-none print:p-0 mx-auto">
-            <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
-              <h2 className="font-extrabold text-xs tracking-wider uppercase">IÑAKI STORE</h2>
-              <p className="text-[9px] text-gray-600">{new Date(receiptData.timestamp).toLocaleString('en-PH')}</p>
-              <p className="text-[9px] font-bold">Receipt #: {receiptData.id}</p>
-            </div>
+            <div id="printable-receipt" className="bg-white text-black p-4 rounded-2xl w-full max-w-[280px] shadow-2xl font-mono text-[11px] leading-tight print:shadow-none print:w-[58mm] print:max-w-[58mm] print:rounded-none print:p-0 mx-auto">
+              <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
+                <h2 className="font-extrabold text-xs tracking-wider uppercase">IÑAKI STORE</h2>
+                <p className="text-[9px] text-gray-600">{new Date(receiptData.timestamp).toLocaleString('en-PH')}</p>
+                <p className="text-[9px] font-bold">Receipt #: {receiptData.id}</p>
+              </div>
 
-            <div className="py-2 border-b border-dashed border-gray-400 space-y-1">
-              {receiptData.items.map((item) => (
-                <div key={item.id} className="flex justify-between items-start">
-                  <div className="pr-1 min-w-0 flex-1">
-                    <p className="font-semibold truncate text-[10px]">{item.name}</p>
-                    <p className="text-[9px] text-gray-600">{item.quantity} x P{item.price.toFixed(2)}</p>
+              <div className="py-2 border-b border-dashed border-gray-400 space-y-1">
+                {receiptData.items.map((item) => (
+                  <div key={item.id} className="flex justify-between items-start">
+                    <div className="pr-1 min-w-0 flex-1">
+                      <p className="font-semibold truncate text-[10px]">{item.name}</p>
+                      <p className="text-[9px] text-gray-600">{item.quantity} x P{item.price.toFixed(2)}</p>
+                    </div>
+                    <span className="font-bold whitespace-nowrap text-[10px]">P{(item.price * item.quantity).toFixed(2)}</span>
                   </div>
-                  <span className="font-bold whitespace-nowrap text-[10px]">P{(item.price * item.quantity).toFixed(2)}</span>
+                ))}
+              </div>
+
+              {/* --- TOTALS & CASH DETAILS --- */}
+              <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
+                <div className="flex justify-between font-bold text-xs pt-0.5">
+                  <span>TOTAL:</span>
+                  <span>P{receiptData.netSales.toFixed(2)}</span>
                 </div>
-              ))}
-            </div>
+                
+                <div className="flex justify-between text-gray-800 uppercase pt-0.5 text-[9px]">
+                  <span>PAYMENT:</span>
+                  <span className="font-bold">{receiptData.paymentMethod}</span>
+                </div>
 
-            <div className="py-2 border-b border-dashed border-gray-400 space-y-0.5 text-[10px]">
-              <div className="flex justify-between font-bold text-xs pt-0.5"><span>TOTAL:</span><span>P{receiptData.netSales.toFixed(2)}</span></div>
-              <div className="flex justify-between text-gray-800 uppercase pt-0.5 text-[9px]"><span>PAYMENT:</span><span className="font-bold">{receiptData.paymentMethod}</span></div>
-              {receiptData.gcashRefNumber && (
-                <div className="flex justify-between text-gray-800 text-[9px]"><span>GCASH REF:</span><span className="font-bold">{receiptData.gcashRefNumber}</span></div>
+                {receiptData.paymentMethod === 'cash' && (
+                  <>
+                    <div className="flex justify-between text-gray-800 text-[9px]">
+                      <span>CASH TENDERED:</span>
+                      <span className="font-bold">
+                        P{(receiptData.cashTendered ?? receiptData.cashReceived ?? 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-gray-800 text-[9px]">
+                      <span>CHANGE:</span>
+                      <span className="font-bold">
+                        P{(receiptData.change ?? receiptData.changeDue ?? 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {receiptData.gcashRefNumber && (
+                  <div className="flex justify-between text-gray-800 text-[9px]">
+                    <span>GCASH REF:</span>
+                    <span className="font-bold">{receiptData.gcashRefNumber}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 text-center text-[9px] space-y-0.5">
+                <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
+                <p className="text-gray-600">Please Come Again</p>
+              </div>
+
+              {btStatus && (
+                <p className="text-[10px] font-bold text-fuchsia-600 text-center mt-2 print-hide animate-pulse">{btStatus}</p>
               )}
-            </div>
 
-            <div className="pt-2 text-center text-[9px] space-y-0.5">
-              <p className="font-bold uppercase tracking-wider">Maraming Salamat Po!</p>
-              <p className="text-gray-600">Please Come Again</p>
-            </div>
+              <div className="flex flex-col gap-2 mt-4 w-full print-hide">
+                <button
+                  disabled={isPrinting}
+                  onClick={() => handleBluetoothPrint(receiptData)}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition shadow-lg shadow-blue-600/20"
+                >
+                  <Bluetooth size={14} /> BT Print & Open Cashbox
+                </button>
 
-            {btStatus && (
-              <p className="text-[10px] font-bold text-fuchsia-600 text-center mt-2 print-hide animate-pulse">{btStatus}</p>
-            )}
-
-            <div className="flex flex-col gap-2 mt-4 w-full print-hide">
-              <button
-                disabled={isPrinting}
-                onClick={() => handleBluetoothPrint(receiptData)}
-                className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition shadow-lg shadow-blue-600/20"
-              >
-                <Bluetooth size={14} /> BT Print & Open Cashbox
-              </button>
-
-              <div className="flex items-center justify-center gap-2">
-                <button onClick={() => window.print()} className="flex-1 bg-slate-800 text-slate-200 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5"><Printer size={14} /> Web Print</button>
-                <button onClick={() => setReceiptData(null)} className="flex-1 bg-slate-800 text-slate-300 font-bold text-xs py-2 rounded-xl">Close</button>
+                <div className="flex items-center justify-center gap-2">
+                  <button onClick={() => window.print()} className="flex-1 bg-slate-800 text-slate-200 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5">
+                    <Printer size={14} /> Web Print
+                  </button>
+                  <button onClick={() => setReceiptData(null)} className="flex-1 bg-slate-800 text-slate-300 font-bold text-xs py-2 rounded-xl">
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* --- ADD / EDIT PRODUCT MODAL --- */}
       {isProductModalOpen && (
