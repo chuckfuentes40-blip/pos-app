@@ -1265,14 +1265,14 @@ const handleDeleteProduct = (id: string) => {
                           </div>
                           <div className="flex items-center gap-1.5">
                             <button
-                              onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
                               className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
                             >
                               -
                             </button>
                             <span className="font-mono text-xs text-white px-1">{item.quantity}</span>
                             <button
-                              onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
                               className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
                             >
                               +
@@ -1823,6 +1823,149 @@ const handleDeleteProduct = (id: string) => {
                     📱 GCash
                   </button>
                 </div>
+
+                {/* Large Numbers Display Area */}
+                <div className="space-y-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  {/* Net Total Display */}
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-semibold text-sm">Net Total:</span>
+                    <span className="text-2xl font-black font-mono text-emerald-400">
+                      ₱{netSales.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Cash Tendered Input Field */}
+                  {paymentMethod === 'cash' ? (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                        Cash Tendered
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-500 font-mono">
+                          ₱
+                        </span>
+                        <input
+                          type="number"
+                          step="any"
+                          autoFocus
+                          placeholder="0.00"
+                          value={cashReceived}
+                          onChange={(e) => setCashReceived(e.target.value)}
+                          className="w-full pl-9 pr-4 py-3 bg-slate-900 border-2 border-fuchsia-500/50 focus:border-fuchsia-500 rounded-xl text-3xl font-black font-mono text-white outline-none"
+                        />
+                      </div>
+
+                      {/* Quick Cash Buttons */}
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {[netSales, 100, 500, 1000].map((amount) => (
+                          <button
+                            key={amount}
+                            onClick={() => setCashReceived(amount.toString())}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold py-1.5 rounded-lg border border-slate-700"
+                          >
+                            ₱{amount}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    /* GCash Ref Input */
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                        GCash Reference #
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 10029384"
+                        value={gcashRefNumber}
+                        onChange={(e) => setGcashRefNumber(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-lg font-mono text-white outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  )}
+
+                  {/* Change Due Display */}
+                  {paymentMethod === 'cash' && (
+                    <div className="flex justify-between items-center border-t border-slate-800 pt-3">
+                      <span className="text-slate-400 font-semibold text-sm">Change:</span>
+                      <span
+                        className={`text-3xl font-black font-mono ${
+                          parsedCash >= netSales ? 'text-fuchsia-400' : 'text-red-400'
+                        }`}
+                      >
+                        ₱{changeDue.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Dynamic Receipt Preview (Appears when cash inputted is sufficient) */}
+                {(paymentMethod === 'gcash' || parsedCash >= netSales) && (
+                  <div className="bg-white text-slate-900 p-4 rounded-2xl shadow-inner text-xs font-mono max-h-48 overflow-y-auto space-y-1 animate-in fade-in duration-200">
+                    <div className="text-center font-bold text-sm border-b pb-1 border-slate-200">
+                      IÑAKI SARI-SARI STORE
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-500">
+                      <span>{new Date().toLocaleDateString()}</span>
+                      <span>{new Date().toLocaleTimeString()}</span>
+                    </div>
+                    <div className="border-b border-dashed border-slate-300 py-1 space-y-1">
+                      {cart.map((item) => (
+                        <div key={item.id} className="flex justify-between">
+                          <span>{item.name} x{item.quantity}</span>
+                          <span>₱{(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="pt-1 space-y-0.5">
+                      <div className="flex justify-between font-bold">
+                        <span>TOTAL:</span>
+                        <span>₱{netSales.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span>PAYMENT ({paymentMethod.toUpperCase()}):</span>
+                        <span>₱{(paymentMethod === 'cash' ? parsedCash : netSales).toFixed(2)}</span>
+                      </div>
+                      {paymentMethod === 'cash' && (
+                        <div className="flex justify-between text-[10px] font-bold">
+                          <span>CHANGE:</span>
+                          <span>₱{changeDue.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-3 gap-2 pt-2">
+                  <button
+                    disabled={paymentMethod === 'cash' && parsedCash < netSales}
+                    onClick={() => handleCheckout('bt_print')}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold py-3 rounded-xl transition flex items-center justify-center gap-1 shadow-lg shadow-blue-600/30"
+                  >
+                    <span>Bluetooth</span>
+                  </button>
+
+                  <button
+                    disabled={paymentMethod === 'cash' && parsedCash < netSales}
+                    onClick={() => handleCheckout('standard_print')}
+                    className="bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-50 text-white text-xs font-bold py-3 rounded-xl transition shadow-lg shadow-fuchsia-600/30"
+                  >
+                    Print
+                  </button>
+
+                  <button
+                    disabled={paymentMethod === 'cash' && parsedCash < netSales}
+                    onClick={() => handleCheckout('close')}
+                    className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-bold py-3 rounded-xl transition border border-slate-700"
+                  >
+                    Complete
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
 
       {/* --- OVERLAY MODALS --- */}
 
