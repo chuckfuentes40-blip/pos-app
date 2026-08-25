@@ -149,7 +149,18 @@ export default function POSSystem() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   // Hardware / PWA setup
-  const [posScanMethod, setPosScanMethod] = useState<ScanMethod>('hardware');
+ // Lazy state initialization from LocalStorage
+const [posScanMethod, setPosScanMethod] = useState<ScanMethod>(() => {
+  const savedMethod = localStorage.getItem('inaki_pos_scan_method') as ScanMethod;
+  return savedMethod || 'hardware';
+});
+
+// Handler to update state and update LocalStorage simultaneously
+const handleScanMethodChange = (method: ScanMethod) => {
+  setPosScanMethod(method);
+  localStorage.setItem('inaki_pos_scan_method', method);
+};
+
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   // Data state
@@ -216,27 +227,34 @@ export default function POSSystem() {
   0
 
   
-  // Complete Transaction Handler
   const handleCompleteTransaction = () => {
-    const newTx: Transaction = {
-      id: `TRX-${Math.floor(10000 + Math.random() * 90000)}`,
-      timestamp: new Date().toISOString(),
-      items: [...cart],
-      netSales: netTotal,
-      paymentMethod: paymentMethod,
-      cashTendered: paymentMethod === 'cash' ? cashTendered : netTotal,
-      change: paymentMethod === 'cash' ? Math.max(0, cashTendered - netTotal) : 0,
-    };
+  const calculatedChange = Math.max(0, cashTendered - netTotal);
 
-    setTransactions((prev) => [newTx, ...prev]);
-    setReceiptData(newTx);
-    setIsPaymentModalOpen(false);
-    setCart([]);
-    setCashTendered(0);
-    setDiscount(0);
-    setExtraFee(0);
-    setDeliveryFee(0);
+  const newTx = {
+    id: `TRX-${Math.floor(10000 + Math.random() * 90000)}`,
+    timestamp: new Date().toISOString(),
+    items: [...cart],
+    netSales: netTotal,
+    paymentMethod: paymentMethod,
+    cashTendered: paymentMethod === 'cash' ? cashTendered : netTotal,
+    change: paymentMethod === 'cash' ? calculatedChange : 0,
+    // Key names required by printable receipt template
+    cashReceived: paymentMethod === 'cash' ? Number(cashTendered) : netTotal,
+    changeDue: paymentMethod === 'cash' ? calculatedChange : 0,
+    discount,
+    serviceFee: extraFee,
+    deliveryFee,
   };
+
+  setTransactions((prev) => [newTx, ...prev]);
+  setReceiptData(newTx);
+  setIsPaymentModalOpen(false);
+  setCart([]);
+  setCashTendered(0);
+  setDiscount(0);
+  setExtraFee(0);
+  setDeliveryFee(0);
+};
   // ✅ PLACE IT HERE (Inside POSSystem, after state definitions)
   const handleOpenProductModal = (product?: Product) => {
     if (product) {
@@ -1377,41 +1395,43 @@ const handleDeleteProduct = (id: string) => {
   )} {/* CLOSED activeTab === 'inventory' */}
 
         {/* 3. Analytics Tab */}
-          {activeTab === 'analytics' && (
-            <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
-              {/* Header & Filter Controls */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg sm:text-xl font-bold">Business Analytics</h2>
-                  <p className="text-xs text-slate-400">Sales performance and financial metrics</p>
-                </div>
+{activeTab === 'analytics' && (
+  <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 min-w-0">
+    {/* Header & Filter Controls */}
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <h2 className="text-lg sm:text-xl font-bold text-white">Business Analytics</h2>
+        <p className="text-xs text-slate-400">Sales performance and financial metrics</p>
+      </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Time Range Selector */}
-                  <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 flex items-center gap-1 text-xs font-semibold">
-                    {(['daily', 'weekly', 'monthly', 'all'] as const).map((range) => (
-                      <button
-                        key={range}
-                        onClick={() => setTimeFilter(range)}
-                        className={`px-3 py-1.5 rounded-lg capitalize transition ${
-                          timeFilter === range
-                            ? 'bg-blue-600 text-white font-bold shadow'
-                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                        }`}
-                      >
-                        {range === 'all' ? 'All Time' : range}
-                      </button>
-                    ))}
-                  </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Time Range Selector */}
+        <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 flex items-center gap-1 text-xs font-semibold">
+          {(['daily', 'weekly', 'monthly', 'all'] as const).map((range) => (
+            <button
+              key={range}
+              onClick={() => setTimeFilter(range)}
+              className={`px-3 py-1.5 rounded-lg capitalize transition ${
+                timeFilter === range
+                  ? 'bg-blue-600 text-white font-bold shadow'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              {range === 'all' ? 'All Time' : range}
+            </button>
+          ))}
+        </div>
 
-                  <button
-                    onClick={() => setIsExportModalOpen(true)}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700"
-                  >
-                    <Mail size="{14}"/> Export Report
-                  </button>
-                </div>
-              </div>
+        {/* Compact Export Button */}
+        <button
+          type="button"
+          onClick={() => setIsExportModalOpen(true)}
+          className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700 shrink-0"
+        >
+          <Mail size={14} /> Export Report
+        </button>
+      </div>
+    </div>
 
               {/* KPI Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
