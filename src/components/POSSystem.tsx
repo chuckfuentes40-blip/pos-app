@@ -247,6 +247,30 @@ export default function POSSystem() {
       return;
     }
 
+     // Product Add / Edit Modal Handler
+  const handleOpenProductModal = (product?: Product) => {
+    if (product) {
+      setEditingProduct(product);
+      setFormName(product.name);
+      setFormPrice(product.price.toString());
+      setFormCost(product.cost ? product.cost.toString() : '');
+      setFormStock(product.stock.toString());
+      setFormLowStock(product.lowStockThreshold ? product.lowStockThreshold.toString() : '5');
+      setFormUnit(product.unit || 'pcs');
+      setFormBarcode(product.barcode || '');
+    } else {
+      setEditingProduct(null);
+      setFormName('');
+      setFormPrice('');
+      setFormCost('');
+      setFormStock('');
+      setFormLowStock('5');
+      setFormUnit('pcs');
+      setFormBarcode('');
+    }
+    setIsModalOpen(true);
+  };
+
     // 4. Build ESC/POS Raw Data Stream (32 character width for 58mm)
     const encoder = new TextEncoder();
     let esc = '';
@@ -535,29 +559,7 @@ useEffect(() => {
     setCustomer({ name: '', phone: '', address: '', notes: '' });
     setShowCustomerFields(false);
   };
-  // Product Add / Edit Modal Handler
-  const handleOpenProductModal = (product?: Product) => {
-    if (product) {
-      setEditingProduct(product);
-      setFormName(product.name);
-      setFormPrice(product.price.toString());
-      setFormCost(product.cost ? product.cost.toString() : '');
-      setFormStock(product.stock.toString());
-      setFormLowStock(product.lowStockThreshold ? product.lowStockThreshold.toString() : '5');
-      setFormUnit(product.unit || 'pcs');
-      setFormBarcode(product.barcode || '');
-    } else {
-      setEditingProduct(null);
-      setFormName('');
-      setFormPrice('');
-      setFormCost('');
-      setFormStock('');
-      setFormLowStock('5');
-      setFormUnit('pcs');
-      setFormBarcode('');
-    }
-    setIsModalOpen(true);
-  };
+ 
 
   // Fee / Discount Modal
   const handleOpenFeeModal = (type: 'discount' | 'service' | 'delivery') => {
