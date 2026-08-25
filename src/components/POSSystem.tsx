@@ -1225,49 +1225,169 @@ const handleDeleteProduct = (id: string) => {
                     </div>
                   )}
 
-                  {/* Calculation Breakdown */}
-                  <div className="pt-2 border-t border-slate-800/80 space-y-1 text-xs">
-                    <div className="flex justify-between text-slate-400">
-                      <span>Subtotal</span>
-                      <span className="font-mono">₱{subtotal.toFixed(2)}</span>
-                    </div>
-                    {discountAmount > 0 && (
-                      <div className="flex justify-between text-fuchsia-400">
-                        <span>Discount</span>
-                        <span className="font-mono">-₱{discountAmount.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {serviceFee > 0 && (
-                      <div className="flex justify-between text-slate-400">
-                        <span>Service Fee</span>
-                        <span className="font-mono">+₱{serviceFee.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {deliveryFee > 0 && (
-                      <div className="flex justify-between text-slate-400">
-                        <span>Delivery Fee</span>
-                        <span className="font-mono">+₱{deliveryFee.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-sm font-extrabold text-white pt-1">
-                      <span>NET TOTAL</span>
-                      <span className="font-mono text-base text-fuchsia-400">₱{netSales.toFixed(2)}</span>
-                    </div>
-                  </div>
+                  {/* Right Sidebar - Cart & Total */}
+<div className="w-80 bg-slate-900 border-l border-slate-800 flex flex-col h-full">
+  {/* Header */}
+  <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+    <h2 className="font-bold text-sm text-white flex items-center gap-2">
+      <ShoppingCart size={16} className="text-fuchsia-500" />
+      Current Order
+    </h2>
+    {cart.length > 0 && (
+      <button
+        onClick={() => setCart([])}
+        className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase transition"
+      >
+        Clear Cart
+      </button>
+    )}
+  </div>
 
-                  {/* Pay Button */}
-                 
-                  <button
-                    onClick={() => setIsPaymentModalOpen(true)}
-                    disabled={cart.length === 0}
-                    className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-lg ${
-                      cart.length > 0
-                        ? 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-fuchsia-600/30'
-                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                    }`}
-                  >
-                    COMPLETE PAYMENT (₱{netSales.toFixed(2)})
-                  </button>
+  {/* Cart Items List */}
+  <div className="flex-1 overflow-y-auto p-3 space-y-2">
+    {cart.length === 0 ? (
+      <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs">
+        <ShoppingCart size={32} className="mb-2 opacity-30" />
+        <p>Cart is empty</p>
+        <p className="text-[10px] text-slate-600">Select items from catalog to build order</p>
+      </div>
+    ) : (
+      cart.map((item) => (
+        <div
+          key={item.id}
+          className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/60 flex justify-between items-center text-xs"
+        >
+          <div className="flex-1 min-w-0 pr-2">
+            <p className="font-bold text-slate-200 truncate">{item.name}</p>
+            <p className="text-[10px] text-slate-400 font-mono">
+              ₱{item.price.toFixed(2)} × {item.quantity}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
+              className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
+            >
+              -
+            </button>
+            <span className="font-mono text-xs text-white px-1">{item.quantity}</span>
+            <button
+              onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
+              className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      ))
+    )}
+  </div>
+
+  {/* Sidebar Controls & Total */}
+  <div className="p-3 bg-slate-950 border-t border-slate-800 space-y-3">
+    {/* Discount & Fee Quick Action Buttons */}
+    <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+      <button
+        onClick={() => {
+          const val = prompt('Enter discount amount (₱):', discountAmount.toString());
+          if (val !== null) setDiscountAmount(parseFloat(val) || 0);
+        }}
+        className="py-1.5 bg-slate-900 border border-slate-800 hover:border-fuchsia-500 rounded-lg text-slate-300 font-medium"
+      >
+        % Disc: ₱{discountAmount}
+      </button>
+      <button
+        onClick={() => {
+          const val = prompt('Enter service fee (₱):', serviceFee.toString());
+          if (val !== null) setServiceFee(parseFloat(val) || 0);
+        }}
+        className="py-1.5 bg-slate-900 border border-slate-800 hover:border-fuchsia-500 rounded-lg text-slate-300 font-medium"
+      >
+        🏷️ Fee: ₱{serviceFee}
+      </button>
+      <button
+        onClick={() => {
+          const val = prompt('Enter delivery fee (₱):', deliveryFee.toString());
+          if (val !== null) setDeliveryFee(parseFloat(val) || 0);
+        }}
+        className="py-1.5 bg-slate-900 border border-slate-800 hover:border-fuchsia-500 rounded-lg text-slate-300 font-medium"
+      >
+        🚚 Del: ₱{deliveryFee}
+      </button>
+    </div>
+
+    {/* Customer Info Toggle */}
+    <button
+      onClick={() => setShowCustomerFields(!showCustomerFields)}
+      className="text-xs text-fuchsia-400 hover:text-fuchsia-300 font-bold flex items-center gap-1"
+    >
+      👤 {showCustomerFields ? 'Hide Customer Info' : '+ Attach Customer Info'}
+    </button>
+
+    {showCustomerFields && (
+      <div className="space-y-1.5 pt-1">
+        <input
+          type="text"
+          placeholder="Customer Name"
+          value={customer.name}
+          onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+          className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white"
+        />
+        <input
+          type="text"
+          placeholder="Phone Number"
+          value={customer.phone}
+          onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
+          className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white"
+        />
+      </div>
+    )}
+
+    {/* Calculation Breakdown */}
+    <div className="pt-2 border-t border-slate-800/80 space-y-1 text-xs">
+      <div className="flex justify-between text-slate-400">
+        <span>Subtotal</span>
+        <span className="font-mono">₱{subtotal.toFixed(2)}</span>
+      </div>
+      {discountAmount > 0 && (
+        <div className="flex justify-between text-fuchsia-400">
+          <span>Discount</span>
+          <span className="font-mono">-₱{discountAmount.toFixed(2)}</span>
+        </div>
+      )}
+      {serviceFee > 0 && (
+        <div className="flex justify-between text-slate-400">
+          <span>Service Fee</span>
+          <span className="font-mono">+₱{serviceFee.toFixed(2)}</span>
+        </div>
+      )}
+      {deliveryFee > 0 && (
+        <div className="flex justify-between text-slate-400">
+          <span>Delivery Fee</span>
+          <span className="font-mono">+₱{deliveryFee.toFixed(2)}</span>
+        </div>
+      )}
+      <div className="flex justify-between text-sm font-extrabold text-white pt-1 border-t border-slate-800/50">
+        <span>NET TOTAL</span>
+        <span className="font-mono text-base text-fuchsia-400">₱{netSales.toFixed(2)}</span>
+      </div>
+    </div>
+
+    {/* Complete Payment Button */}
+    <button
+      type="button"
+      onClick={() => setIsPaymentModalOpen(true)}
+      disabled={cart.length === 0}
+      className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-lg ${
+        cart.length > 0
+          ? 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-fuchsia-600/30'
+          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+      }`}
+    >
+      COMPLETE PAYMENT (₱{netSales.toFixed(2)})
+    </button>
+  </div>
+</div>
                 </div>
               </div>
             </div>
