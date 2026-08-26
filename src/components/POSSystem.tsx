@@ -429,7 +429,7 @@ export default function POSSystem() {
   ]);
 
       // Using 'async function' enables function hoisting across the entire component scope
-async function fetchProducts() {
+  async function fetchProducts() {
   try {
     const { data, error } = await supabase
       .from('products')
@@ -1112,9 +1112,66 @@ const filteredMetrics = useMemo(() => {
   };
 }, [filteredTransactions]);
 
-    
+// 1. Default Theme Schema
+const DEFAULT_THEME = {
+  bgPrimary: '#020617',    // slate-950
+  bgCard: '#0f172a',       // slate-900
+  borderColor: '#1e293b',  // slate-800
+  textPrimary: '#f8fafc',  // slate-50
+  accentColor: '#c026d3',  // fuchsia-600
+  fontFamily: 'sans-serif'
+};
+
+// 2. Initialize Theme state from LocalStorage (persists selected settings)
+const [appTheme, setAppTheme] = useState(() => {
+  const saved = localStorage.getItem('pos_app_theme');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return DEFAULT_THEME;
+    }
+  }
+  return DEFAULT_THEME;
+});
+
+// 3. Inject CSS Variables into DOM Root & Save Changes Automatically
+useEffect(() => {
+  const root = document.documentElement;
+  root.style.setProperty('--bg-primary', appTheme.bgPrimary);
+  root.style.setProperty('--bg-card', appTheme.bgCard);
+  root.style.setProperty('--border-color', appTheme.borderColor);
+  root.style.setProperty('--text-primary', appTheme.textPrimary);
+  root.style.setProperty('--accent-color', appTheme.accentColor);
+  root.style.setProperty('--font-family', appTheme.fontFamily);
+
+  // Persist preference to browser storage
+  localStorage.setItem('pos_app_theme', JSON.stringify(appTheme));
+}, [appTheme]);
+
+// Preset Handler
+const applyPreset = (preset: typeof DEFAULT_THEME) => {
+  setAppTheme(preset);
+};
+
+
+
+
+    return (
+  <div 
+    className="min-h-screen flex flex-col transition-colors duration-200"
+    style={{
+      backgroundColor: 'var(--bg-primary)',
+      color: 'var(--text-primary)',
+      fontFamily: 'var(--font-family)'
+    }}
+  >
+    {/* Navigation & Tab Content */}
+  </div>
+);
 
   return (
+  
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} flex flex-col font-sans`}>
       {/* Top Header Navigation */}
       <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
@@ -1568,13 +1625,16 @@ const filteredMetrics = useMemo(() => {
         {activeTab === 'settings' && (
           <div className="flex-1 p-6 overflow-y-auto max-w-2xl mx-auto w-full space-y-6">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
-              <div className="p-3 bg-fuchsia-600/20 text-fuchsia-400 rounded-xl"><Sliders size={22} /></div>
+              <div className="p-3 bg-fuchsia-600/20 text-fuchsia-400 rounded-xl">
+                <Sliders size={22} />
+              </div>
               <div>
                 <h2 className="text-lg font-bold">Hardware & System Settings</h2>
-                <p className="text-xs text-slate-400">Configure scanner hardware and Bluetooth devices</p>
+                <p className="text-xs text-slate-400">Configure scanner hardware, printers, and visual themes</p>
               </div>
             </div>
 
+            {/* Bluetooth Printer & Cash Drawer */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="font-semibold text-slate-100 text-sm">Bluetooth Thermal Printer & Cash Drawer</h3>
               <p className="text-xs text-slate-400">Pair your ESC/POS thermal printer to enable direct receipt printing and automatic cashbox unlocking.</p>
@@ -1586,6 +1646,7 @@ const filteredMetrics = useMemo(() => {
               </button>
             </div>
 
+            {/* Primary POS Scanner Method */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="font-semibold text-slate-100 text-sm">Primary POS Scanner Method</h3>
               <div className="grid grid-cols-3 gap-3">
@@ -1597,7 +1658,11 @@ const filteredMetrics = useMemo(() => {
                   <button
                     key={option.id}
                     onClick={() => setPosScanMethod(option.id as ScanMethod)}
-                    className={`p-3.5 rounded-xl border text-left transition ${posScanMethod === option.id ? 'bg-fuchsia-600/10 border-fuchsia-500 text-white' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
+                    className={`p-3.5 rounded-xl border text-left transition ${
+                      posScanMethod === option.id 
+                        ? 'bg-fuchsia-600/10 border-fuchsia-500 text-white' 
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
                   >
                     <p className="font-bold text-xs">{option.label}</p>
                     <p className="text-[10px] text-slate-500 mt-1">{option.desc}</p>
@@ -1606,20 +1671,163 @@ const filteredMetrics = useMemo(() => {
               </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-              <h3 className="font-semibold text-slate-100 text-sm">Theme Appearance</h3>
-              <div className="grid grid-cols-2 gap-3 max-w-sm">
+            {/* Theme & Visual Customization Section */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
+              <div>
+                <h3 className="font-semibold text-slate-100 text-sm">Theme Appearance & Styling</h3>
+                <p className="text-xs text-slate-400">Custom theme choices automatically save and remain active until modified.</p>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-300 block">Quick Presets</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => applyPreset(DEFAULT_THEME)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-200 hover:border-slate-600 transition"
+                  >
+                    🌙 Midnight Dark
+                  </button>
+
+                  <button
+                    onClick={() => applyPreset({
+                      bgPrimary: '#052e16',
+                      bgCard: '#064e3b',
+                      borderColor: '#047857',
+                      textPrimary: '#ecfdf5',
+                      accentColor: '#10b981',
+                      fontFamily: 'sans-serif'
+                    })}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-950 border border-emerald-800 text-xs font-semibold text-emerald-200 hover:border-emerald-600 transition"
+                  >
+                    🌲 Emerald Forest
+                  </button>
+
+                  <button
+                    onClick={() => applyPreset({
+                      bgPrimary: '#18181b',
+                      bgCard: '#27272a',
+                      borderColor: '#3f3f46',
+                      textPrimary: '#fafafa',
+                      accentColor: '#f43f5e',
+                      fontFamily: 'monospace'
+                    })}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-xs font-semibold text-rose-300 hover:border-rose-500 transition"
+                  >
+                    🤖 Cyber Terminal
+                  </button>
+
+                  <button
+                    onClick={() => applyPreset({
+                      bgPrimary: '#f8fafc',
+                      bgCard: '#ffffff',
+                      borderColor: '#e2e8f0',
+                      textPrimary: '#0f172a',
+                      accentColor: '#2563eb',
+                      fontFamily: 'sans-serif'
+                    })}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-800 hover:border-slate-400 transition"
+                  >
+                    ☀️ Clean Light
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Color Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+                {/* Main Background Color */}
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-200">Main Background</p>
+                    <p className="text-[10px] text-slate-500">App body color</p>
+                  </div>
+                  <input
+                    type="color"
+                    value={appTheme.bgPrimary}
+                    onChange={(e) => setAppTheme({ ...appTheme, bgPrimary: e.target.value })}
+                    className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                  />
+                </div>
+
+                {/* Card Background Color */}
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-200">Container / Cards</p>
+                    <p className="text-[10px] text-slate-500">Panel surface color</p>
+                  </div>
+                  <input
+                    type="color"
+                    value={appTheme.bgCard}
+                    onChange={(e) => setAppTheme({ ...appTheme, bgCard: e.target.value })}
+                    className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                  />
+                </div>
+
+                {/* Border Color */}
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-200">Borders</p>
+                    <p className="text-[10px] text-slate-500">Grid lines & outlines</p>
+                  </div>
+                  <input
+                    type="color"
+                    value={appTheme.borderColor}
+                    onChange={(e) => setAppTheme({ ...appTheme, borderColor: e.target.value })}
+                    className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                  />
+                </div>
+
+                {/* Accent Color */}
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-200">Accent Highlight</p>
+                    <p className="text-[10px] text-slate-500">Active tab & key focus</p>
+                  </div>
+                  <input
+                    type="color"
+                    value={appTheme.accentColor}
+                    onChange={(e) => setAppTheme({ ...appTheme, accentColor: e.target.value })}
+                    className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                  />
+                </div>
+
+                {/* Text Color */}
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-200">Typography Text</p>
+                    <p className="text-[10px] text-slate-500">Main text color</p>
+                  </div>
+                  <input
+                    type="color"
+                    value={appTheme.textPrimary}
+                    onChange={(e) => setAppTheme({ ...appTheme, textPrimary: e.target.value })}
+                    className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                  />
+                </div>
+
+                {/* Font Family Selector */}
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                  <p className="text-xs font-bold text-slate-200">App Font Family</p>
+                  <select
+                    value={appTheme.fontFamily}
+                    onChange={(e) => setAppTheme({ ...appTheme, fontFamily: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg p-1.5 focus:outline-none"
+                  >
+                    <option value="sans-serif">Sans-Serif (Modern Clean)</option>
+                    <option value="monospace">Monospace (Terminal Tech)</option>
+                    <option value="serif">Serif (Classic)</option>
+                    <option value="system-ui">System Default UI</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Reset Default Action */}
+              <div className="flex justify-end pt-2">
                 <button
-                  onClick={() => setTheme('dark')}
-                  className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-bold transition ${theme === 'dark' ? 'border-fuchsia-500 bg-fuchsia-950/20 text-white' : 'border-slate-800 text-slate-400'}`}
+                  onClick={() => applyPreset(DEFAULT_THEME)}
+                  className="text-xs text-slate-400 hover:text-slate-200 underline transition"
                 >
-                  <Moon size={16} /> Dark Mode
-                </button>
-                <button
-                  onClick={() => setTheme('light')}
-                  className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-bold transition ${theme === 'light' ? 'border-fuchsia-500 bg-fuchsia-950/20 text-white' : 'border-slate-800 text-slate-400'}`}
-                >
-                  <Sun size={16} /> Light Mode
+                  Reset to Default Theme
                 </button>
               </div>
             </div>
