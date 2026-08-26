@@ -373,7 +373,7 @@ export default function POSSystem() {
   }, [products]);
 
   const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'analytics' | 'ledger' | 'settings'>('pos');
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
 
   // Supabase Data States
   const [transactions, setTransactions] = useState<ReceiptData[]>([]);
@@ -1112,47 +1112,64 @@ const filteredMetrics = useMemo(() => {
   };
 }, [filteredTransactions]);
 
-// 1. Default Theme Schema
+// 1. Theme Configuration Schema
 const DEFAULT_THEME = {
-  bgPrimary: '#020617',    // slate-950
-  bgCard: '#0f172a',       // slate-900
-  borderColor: '#1e293b',  // slate-800
-  textPrimary: '#f8fafc',  // slate-50
-  accentColor: '#c026d3',  // fuchsia-600
-  fontFamily: 'sans-serif'
+  bgPrimary: '#020617',
+  bgCard: '#0f172a',
+  borderColor: '#1e293b',
+  textPrimary: '#f8fafc',
+  accentColor: '#c026d3',
+  fontFamily: 'sans-serif',
 };
 
-// 2. Initialize Theme state from LocalStorage (persists selected settings)
-const [appTheme, setAppTheme] = useState(() => {
-  const saved = localStorage.getItem('pos_app_theme');
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch (e) {
-      return DEFAULT_THEME;
-    }
+// 2. Persistent Theme State (Next.js SSR Safe)
+const [theme, setThemeState] = useState(() => {
+  // Check if code is running in the browser before accessing localStorage
+  if (typeof window === 'undefined') return DEFAULT_THEME;
+  try {
+    const saved = localStorage.getItem('pos_app_theme');
+    return saved ? JSON.parse(saved) : DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME;
   }
-  return DEFAULT_THEME;
 });
 
-// 3. Inject CSS Variables into DOM Root & Save Changes Automatically
-useEffect(() => {
-  const root = document.documentElement;
-  root.style.setProperty('--bg-primary', appTheme.bgPrimary);
-  root.style.setProperty('--bg-card', appTheme.bgCard);
-  root.style.setProperty('--border-color', appTheme.borderColor);
-  root.style.setProperty('--text-primary', appTheme.textPrimary);
-  root.style.setProperty('--accent-color', appTheme.accentColor);
-  root.style.setProperty('--font-family', appTheme.fontFamily);
-
-  // Persist preference to browser storage
-  localStorage.setItem('pos_app_theme', JSON.stringify(appTheme));
-}, [appTheme]);
-
-// Preset Handler
-const applyPreset = (preset: typeof DEFAULT_THEME) => {
-  setAppTheme(preset);
+// Helper function to update theme
+const applyTheme = (newTheme: typeof DEFAULT_THEME | string) => {
+  if (typeof newTheme === 'string') {
+    if (newTheme === 'light') {
+      setThemeState({
+        bgPrimary: '#f8fafc',
+        bgCard: '#ffffff',
+        borderColor: '#e2e8f0',
+        textPrimary: '#0f172a',
+        accentColor: '#2563eb',
+        fontFamily: 'sans-serif'
+      });
+    } else {
+      setThemeState(DEFAULT_THEME);
+    }
+  } else {
+    setThemeState(newTheme);
+  }
 };
+
+// 3. Sync CSS Variables & LocalStorage (Client Side Only)
+useEffect(() => {
+  if (typeof window === 'undefined') return;
+
+  const root = document.documentElement;
+  const current = typeof theme === 'object' ? theme : DEFAULT_THEME;
+
+  root.style.setProperty('--bg-primary', current.bgPrimary || '#020617');
+  root.style.setProperty('--bg-card', current.bgCard || '#0f172a');
+  root.style.setProperty('--border-color', current.borderColor || '#1e293b');
+  root.style.setProperty('--text-primary', current.textPrimary || '#f8fafc');
+  root.style.setProperty('--accent-color', current.accentColor || '#c026d3');
+  root.style.setProperty('--font-family', current.fontFamily || 'sans-serif');
+
+  localStorage.setItem('pos_app_theme', JSON.stringify(current));
+}, [theme]);
 
 
 
@@ -1630,223 +1647,203 @@ const applyPreset = (preset: typeof DEFAULT_THEME) => {
           </div>
         )}
 
-        {/* --- 5. SETTINGS TAB --- */}
-        {activeTab === 'settings' && (
-          <div className="flex-1 p-6 overflow-y-auto max-w-2xl mx-auto w-full space-y-6">
-            <div className="flex items-center gap-3 pb-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
-              <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--accent-color)', opacity: 0.2 }}>
-                <Sliders size={22} style={{ color: 'var(--accent-color)' }} />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Hardware & System Settings</h2>
-                <p className="text-xs opacity-70">Configure scanner hardware, printers, and visual themes</p>
-              </div>
-            </div>
+       {/* --- 5. SETTINGS TAB --- */}
+{activeTab === 'settings' && (
+  <div className="flex-1 p-6 overflow-y-auto max-w-2xl mx-auto w-full space-y-6">
+    <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
+      <div className="p-3 bg-fuchsia-600/20 text-fuchsia-400 rounded-xl">
+        <Sliders size={22} />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold">Hardware & System Settings</h2>
+        <p className="text-xs text-slate-400">Configure scanner hardware, printers, and visual themes</p>
+      </div>
+    </div>
 
-            {/* Bluetooth Printer & Cash Drawer */}
-            <div className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-              <h3 className="font-semibold text-sm">Bluetooth Thermal Printer & Cash Drawer</h3>
-              <p className="text-xs opacity-70">Pair your ESC/POS thermal printer to enable direct receipt printing and automatic cashbox unlocking.</p>
-              <button
-                onClick={handleKickCashbox}
-                className="text-xs font-bold px-4 py-2.5 rounded-xl border flex items-center gap-2 transition"
-                style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
-              >
-                <Unlock size={16} className="text-amber-400" /> Test Open Cashbox Pulse
-              </button>
-            </div>
-
-            {/* Primary POS Scanner Method */}
-            <div className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-              <h3 className="font-semibold text-sm">Primary POS Scanner Method</h3>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { id: 'hardware', label: 'Hardware Gun', desc: 'USB/BT barcode gun' },
-                  { id: 'camera', label: 'Device Camera', desc: 'Integrated auto-focus' },
-                  { id: 'manual', label: 'Manual Key', desc: 'Direct search input' },
-                ].map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => setPosScanMethod(option.id as ScanMethod)}
-                    className="p-3.5 rounded-xl border text-left transition"
-                    style={{
-                      backgroundColor: posScanMethod === option.id ? 'var(--accent-color)' : 'var(--bg-primary)',
-                      borderColor: posScanMethod === option.id ? 'var(--accent-color)' : 'var(--border-color)',
-                      color: posScanMethod === option.id ? '#ffffff' : 'var(--text-primary)'
-                    }}
-                  >
-                    <p className="font-bold text-xs">{option.label}</p>
-                    <p className="text-[10px] opacity-60 mt-1">{option.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-           {/* Theme & Visual Customization Section */}
-<div className="p-5 rounded-2xl border space-y-5" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-  <div>
-    <h3 className="font-semibold text-sm">Theme Appearance & Customization</h3>
-    <p className="text-xs opacity-70">Personalize colors, card borders, background, and fonts across the app.</p>
-  </div>
-
-  {/* Quick Presets */}
-  <div className="space-y-2">
-    <label className="text-xs font-bold block">Quick Presets</label>
-    <div className="flex flex-wrap gap-2">
+    {/* Bluetooth Thermal Printer */}
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+      <h3 className="font-semibold text-slate-100 text-sm">Bluetooth Thermal Printer & Cash Drawer</h3>
+      <p className="text-xs text-slate-400">Pair your ESC/POS thermal printer to enable direct receipt printing and automatic cashbox unlocking.</p>
       <button
-        onClick={() => applyPreset(DEFAULT_THEME)}
-        className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
-        style={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }}
+        onClick={handleKickCashbox}
+        className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-700 flex items-center gap-2 transition"
       >
-        🌙 Midnight Dark
-      </button>
-
-      <button
-        onClick={() => applyPreset({
-          bgPrimary: '#052e16',
-          bgCard: '#064e3b',
-          borderColor: '#047857',
-          textPrimary: '#ecfdf5',
-          accentColor: '#10b981',
-          fontFamily: 'sans-serif'
-        })}
-        className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
-        style={{ backgroundColor: '#064e3b', borderColor: '#047857', color: '#ecfdf5' }}
-      >
-        🌲 Emerald Forest
-      </button>
-
-      <button
-        onClick={() => applyPreset({
-          bgPrimary: '#18181b',
-          bgCard: '#27272a',
-          borderColor: '#3f3f46',
-          textPrimary: '#fafafa',
-          accentColor: '#f43f5e',
-          fontFamily: 'monospace'
-        })}
-        className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
-        style={{ backgroundColor: '#27272a', borderColor: '#3f3f46', color: '#f43f5e' }}
-      >
-        🤖 Cyber Terminal
-      </button>
-
-      <button
-        onClick={() => applyPreset({
-          bgPrimary: '#f8fafc',
-          bgCard: '#ffffff',
-          borderColor: '#e2e8f0',
-          textPrimary: '#0f172a',
-          accentColor: '#2563eb',
-          fontFamily: 'sans-serif'
-        })}
-        className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
-        style={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#0f172a' }}
-      >
-        ☀️ Clean Light
+        <Unlock size={16} className="text-amber-400" /> Test Open Cashbox Pulse
       </button>
     </div>
-  </div>
 
-  {/* Custom Color Controls */}
-  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
-    {/* Main Background Color */}
-    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-      <div>
-        <p className="text-xs font-bold">Main Background</p>
-        <p className="text-[10px] opacity-60">App body background</p>
+    {/* POS Scanner Method */}
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+      <h3 className="font-semibold text-slate-100 text-sm">Primary POS Scanner Method</h3>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { id: 'hardware', label: 'Hardware Gun', desc: 'USB/BT barcode gun' },
+          { id: 'camera', label: 'Device Camera', desc: 'Integrated auto-focus' },
+          { id: 'manual', label: 'Manual Key', desc: 'Direct search input' },
+        ].map((option) => (
+          <button
+            key={option.id}
+            onClick={() => setPosScanMethod(option.id as ScanMethod)}
+            className={`p-3.5 rounded-xl border text-left transition ${
+              posScanMethod === option.id 
+                ? 'bg-fuchsia-600/10 border-fuchsia-500 text-white' 
+                : 'bg-slate-950 border-slate-800 text-slate-400'
+            }`}
+          >
+            <p className="font-bold text-xs">{option.label}</p>
+            <p className="text-[10px] text-slate-500 mt-1">{option.desc}</p>
+          </button>
+        ))}
       </div>
-      <input
-        type="color"
-        value={appTheme.bgPrimary}
-        onChange={(e) => setAppTheme({ ...appTheme, bgPrimary: e.target.value })}
-        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-      />
     </div>
 
-    {/* Card Background Color */}
-    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
+    {/* Theme & Visual Customization Section */}
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
       <div>
-        <p className="text-xs font-bold">Container / Cards</p>
-        <p className="text-[10px] opacity-60">Panel surface color</p>
+        <h3 className="font-semibold text-slate-100 text-sm">Theme Appearance & Customization</h3>
+        <p className="text-xs text-slate-400">Customize background, card borders, typography, and accent colors across the app.</p>
       </div>
-      <input
-        type="color"
-        value={appTheme.bgCard}
-        onChange={(e) => setAppTheme({ ...appTheme, bgCard: e.target.value })}
-        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-      />
-    </div>
 
-    {/* Border Color */}
-    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-      <div>
-        <p className="text-xs font-bold">Borders</p>
-        <p className="text-[10px] opacity-60">Card borders & dividers</p>
+      {/* Quick Presets */}
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-slate-300 block">Quick Presets</label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => applyTheme(DEFAULT_THEME)}
+            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-200 hover:border-slate-600 transition"
+          >
+            🌙 Midnight Dark
+          </button>
+
+          <button
+            onClick={() => applyTheme({
+              bgPrimary: '#052e16',
+              bgCard: '#064e3b',
+              borderColor: '#047857',
+              textPrimary: '#ecfdf5',
+              accentColor: '#10b981',
+              fontFamily: 'sans-serif'
+            })}
+            className="px-3 py-1.5 rounded-xl bg-emerald-950 border border-emerald-800 text-xs font-semibold text-emerald-200 hover:border-emerald-600 transition"
+          >
+            🌲 Emerald Forest
+          </button>
+
+          <button
+            onClick={() => applyTheme({
+              bgPrimary: '#18181b',
+              bgCard: '#27272a',
+              borderColor: '#3f3f46',
+              textPrimary: '#fafafa',
+              accentColor: '#f43f5e',
+              fontFamily: 'monospace'
+            })}
+            className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-xs font-semibold text-rose-300 hover:border-rose-500 transition"
+          >
+            🤖 Cyber Terminal
+          </button>
+
+          <button
+            onClick={() => applyTheme('light')}
+            className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-800 hover:border-slate-400 transition"
+          >
+            ☀️ Clean Light
+          </button>
+        </div>
       </div>
-      <input
-        type="color"
-        value={appTheme.borderColor}
-        onChange={(e) => setAppTheme({ ...appTheme, borderColor: e.target.value })}
-        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-      />
-    </div>
 
-    {/* Accent Color */}
-    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-      <div>
-        <p className="text-xs font-bold">Accent Highlight</p>
-        <p className="text-[10px] opacity-60">Active tab & key focus</p>
+      {/* Custom Color Inputs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-200">Main Background</p>
+            <p className="text-[10px] text-slate-500">App body background</p>
+          </div>
+          <input
+            type="color"
+            value={typeof theme === 'object' ? theme.bgPrimary : DEFAULT_THEME.bgPrimary}
+            onChange={(e) => applyTheme({ ... (typeof theme === 'object' ? theme : DEFAULT_THEME), bgPrimary: e.target.value })}
+            className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+          />
+        </div>
+
+        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-200">Container / Cards</p>
+            <p className="text-[10px] text-slate-500">Panel surface color</p>
+          </div>
+          <input
+            type="color"
+            value={typeof theme === 'object' ? theme.bgCard : DEFAULT_THEME.bgCard}
+            onChange={(e) => applyTheme({ ... (typeof theme === 'object' ? theme : DEFAULT_THEME), bgCard: e.target.value })}
+            className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+          />
+        </div>
+
+        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-200">Borders</p>
+            <p className="text-[10px] text-slate-500">Card borders & dividers</p>
+          </div>
+          <input
+            type="color"
+            value={typeof theme === 'object' ? theme.borderColor : DEFAULT_THEME.borderColor}
+            onChange={(e) => applyTheme({ ... (typeof theme === 'object' ? theme : DEFAULT_THEME), borderColor: e.target.value })}
+            className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+          />
+        </div>
+
+        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-200">Accent Highlight</p>
+            <p className="text-[10px] text-slate-500">Active tab & key focus</p>
+          </div>
+          <input
+            type="color"
+            value={typeof theme === 'object' ? theme.accentColor : DEFAULT_THEME.accentColor}
+            onChange={(e) => applyTheme({ ... (typeof theme === 'object' ? theme : DEFAULT_THEME), accentColor: e.target.value })}
+            className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+          />
+        </div>
+
+        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-200">Typography Text</p>
+            <p className="text-[10px] text-slate-500">Main text color</p>
+          </div>
+          <input
+            type="color"
+            value={typeof theme === 'object' ? theme.textPrimary : DEFAULT_THEME.textPrimary}
+            onChange={(e) => applyTheme({ ... (typeof theme === 'object' ? theme : DEFAULT_THEME), textPrimary: e.target.value })}
+            className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+          />
+        </div>
+
+        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+          <p className="text-xs font-bold text-slate-200">App Font Family</p>
+          <select
+            value={typeof theme === 'object' ? theme.fontFamily : DEFAULT_THEME.fontFamily}
+            onChange={(e) => applyTheme({ ... (typeof theme === 'object' ? theme : DEFAULT_THEME), fontFamily: e.target.value })}
+            className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg p-1.5 focus:outline-none"
+          >
+            <option value="sans-serif">Sans-Serif (Modern Clean)</option>
+            <option value="monospace">Monospace (Terminal Tech)</option>
+            <option value="serif">Serif (Classic)</option>
+            <option value="system-ui">System Default UI</option>
+          </select>
+        </div>
       </div>
-      <input
-        type="color"
-        value={appTheme.accentColor}
-        onChange={(e) => setAppTheme({ ...appTheme, accentColor: e.target.value })}
-        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-      />
-    </div>
 
-    {/* Text Color */}
-    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-      <div>
-        <p className="text-xs font-bold">Typography Text</p>
-        <p className="text-[10px] opacity-60">Main text color</p>
+      <div className="flex justify-end pt-2">
+        <button
+          onClick={() => applyTheme(DEFAULT_THEME)}
+          className="text-xs text-slate-400 hover:text-slate-200 underline transition"
+        >
+          Reset to Default Theme
+        </button>
       </div>
-      <input
-        type="color"
-        value={appTheme.textPrimary}
-        onChange={(e) => setAppTheme({ ...appTheme, textPrimary: e.target.value })}
-        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-      />
     </div>
 
-    {/* Font Family Selector */}
-    <div className="p-3 rounded-xl border space-y-1" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-      <p className="text-xs font-bold">App Font Family</p>
-      <select
-        value={appTheme.fontFamily}
-        onChange={(e) => setAppTheme({ ...appTheme, fontFamily: e.target.value })}
-        className="w-full border text-xs rounded-lg p-1.5 focus:outline-none"
-        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
-      >
-        <option value="sans-serif">Sans-Serif (Modern Clean)</option>
-        <option value="monospace">Monospace (Terminal Tech)</option>
-        <option value="serif">Serif (Classic)</option>
-        <option value="system-ui">System Default UI</option>
-      </select>
-    </div>
-  </div>
-
-  {/* Reset Default Action */}
-  <div className="flex justify-end pt-2">
-    <button
-      onClick={() => applyPreset(DEFAULT_THEME)}
-      className="text-xs underline transition opacity-70 hover:opacity-100"
-    >
-      Reset to Default Theme
-    </button>
-  </div>
-</div>
           </div>
         )}
       </main>
