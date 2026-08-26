@@ -492,29 +492,38 @@ export default function POSSystem() {
   }, 0);
 
   // Cart Handlers
-  const addToCart = (product: Product) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      if (existing) {
-        return prev.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
-      }
-      return [...prev, { ...product, quantity: 1 }];
-    });
-  };
+const addToCart = (product: Product) => {
+  // 1. Block if base stock is zero or negative
+  if (product.stock <= 0) return;
 
-  const updateQuantity = (id: string, delta: number) => {
-    setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.id === id) {
-            const newQty = item.quantity + delta;
-            return newQty > 0 ? { ...item, quantity: newQty } : null;
-          }
-          return item;
-        })
-        .filter(Boolean) as CartItem[]
-    );
-  };
+  setCart((prev) => {
+    const existing = prev.find((item) => item.id === product.id);
+    if (existing) {
+      // 2. Prevent adding more than available stock
+      if (existing.quantity >= product.stock) return prev;
+      return prev.map((item) => 
+        item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+      );
+    }
+    return [...prev, { ...product, quantity: 1 }];
+  });
+};
+
+const updateQuantity = (id: string, delta: number) => {
+  setCart((prev) =>
+    prev
+      .map((item) => {
+        if (item.id === id) {
+          const newQty = item.quantity + delta;
+          // 3. Cap incrementing beyond current item stock
+          if (newQty > item.stock) return item; 
+          return newQty > 0 ? { ...item, quantity: newQty } : null;
+        }
+        return item;
+      })
+      .filter(Boolean) as CartItem[]
+  );
+};
 
   const removeFromCart = (id: string) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
