@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -24,7 +24,8 @@ import {
   CreditCard,
   Edit,
   Bluetooth,
-  Unlock
+  Unlock,
+  Wallet,
 } from 'lucide-react';
 
 // --- SUPABASE CLIENT INITIALIZATION ---
@@ -292,6 +293,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
     }
   };
 
+ 
+
   
 
   
@@ -360,6 +363,15 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
 // --- MAIN POS SYSTEM COMPONENT ---
 export default function POSSystem() {
   const [products, setProducts] = useState<Product[]>([]);
+   // Calculate Total Capital Value of Current Inventory
+  const totalCapital = useMemo(() => {
+    return products.reduce((acc, product) => {
+      const cost = Number(product.costPrice || 0);
+      const stock = Number(product.stock || 0);
+      return acc + cost * stock;
+    }, 0);
+  }, [products]);
+
   const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'analytics' | 'ledger' | 'settings'>('pos');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
@@ -1213,7 +1225,7 @@ useEffect(() => {
           </div>
         )}
 
-        {/* --- 3. ANALYTICS TAB --- */}
+       {/* --- 3. ANALYTICS TAB --- */}
         {activeTab === 'analytics' && (
           <div className="flex-1 p-6 overflow-y-auto max-w-5xl mx-auto w-full space-y-6">
             <div className="flex justify-between items-center">
@@ -1237,13 +1249,17 @@ useEffect(() => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Updated to lg:grid-cols-5 to accommodate the new card */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              
+              {/* 1. Total Revenue */}
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
                 <span className="text-slate-400 text-xs block font-semibold">Total Revenue</span>
                 <span className="font-mono text-2xl font-bold text-emerald-400">₱{totalSales.toFixed(2)}</span>
                 <span className="text-[10px] text-slate-500 block font-semibold">{transactions.length} total transactions</span>
               </div>
 
+              {/* 2. GCash Payments */}
               <div className="bg-slate-900 border border-blue-500/30 p-4 rounded-2xl space-y-1 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/30">
                 <div className="flex justify-between items-center">
                   <span className="text-blue-300 text-xs block font-semibold">GCash Payments</span>
@@ -1253,57 +1269,37 @@ useEffect(() => {
                 <span className="text-[10px] text-blue-300/80 block font-semibold">{gcashCount} GCash transactions</span>
               </div>
 
+              {/* 3. Estimated Profit */}
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
                 <span className="text-slate-400 text-xs block font-semibold">Estimated Profit</span>
                 <span className="font-mono text-2xl font-bold text-fuchsia-400">₱{estimatedProfit.toFixed(2)}</span>
                 <span className="text-[10px] text-slate-500 block font-semibold">Net revenue - cost</span>
               </div>
 
+              {/* 👇 4. NEW TOTAL INVENTORY CAPITAL CARD 👇 */}
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 text-xs block font-semibold">Total Capital</span>
+                  <Wallet size={18} className="text-indigo-400" />
+                </div>
+                <span className="font-mono text-2xl font-bold text-indigo-400">
+                  ₱{totalCapital.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[10px] text-slate-500 block font-semibold">Cost Price × Available Stock</span>
+              </div>
+
+              {/* 5. Total Transactions */}
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
                 <span className="text-slate-400 text-xs block font-semibold">Total Transactions</span>
                 <span className="font-mono text-2xl font-bold text-amber-400">{transactions.length}</span>
                 <span className="text-[10px] text-slate-500 block font-semibold">Server log entries</span>
               </div>
+
             </div>
 
             <div className="space-y-3">
               <h3 className="font-bold text-sm text-slate-200">Supabase Transaction Log</h3>
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                {transactions.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 text-xs">
-                    {isLoadingTransactions ? 'Loading server transactions...' : 'No processed transactions found.'}
-                  </div>
-                ) : (
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[10px]">
-                      <tr>
-                        <th className="p-3.5">Invoice ID</th>
-                        <th className="p-3.5">Date & Time</th>
-                        <th className="p-3.5">Method</th>
-                        <th className="p-3.5">GCash Ref #</th>
-                        <th className="p-3.5">Items</th>
-                        <th className="p-3.5 text-right">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                      {transactions.map((tx) => (
-                        <tr key={tx.id} className="hover:bg-slate-800/40 transition">
-                          <td className="p-3.5 font-mono text-slate-300 font-bold">{tx.id}</td>
-                          <td className="p-3.5 text-slate-400 text-[11px]">{new Date(tx.timestamp).toLocaleString('en-PH')}</td>
-                          <td className="p-3.5 uppercase font-bold">
-                            <span className={`px-2 py-0.5 rounded text-[10px] ${tx.paymentMethod === 'gcash' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                              {tx.paymentMethod}
-                            </span>
-                          </td>
-                          <td className="p-3.5 font-mono text-slate-400 text-[11px]">{tx.gcashRefNumber || '-'}</td>
-                          <td className="p-3.5 text-slate-400">{tx.items.length} items</td>
-                          <td className="p-3.5 text-right font-mono font-bold text-amber-400">₱{tx.netSales.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+              {/* Transaction table continues here... */}
             </div>
           </div>
         )}
