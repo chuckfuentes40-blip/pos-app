@@ -983,14 +983,32 @@ useEffect(() => {
   };
 }, [posScanMethod, handleBarcodeScanned]);
 
-// Export Transactions to Excel / CSV
+// Export Summary Metrics & Filtered Transactions to Excel / CSV
 const handleExportToExcel = () => {
-  if (!transactions || transactions.length === 0) {
-    alert("No transaction data available to export.");
+  if (!filteredTransactions || filteredTransactions.length === 0) {
+    alert("No transaction data available for the selected timeframe.");
     return;
   }
 
-  // 1. Define Column Headers
+  const timeframeLabel = analyticsTimeframe.toUpperCase();
+
+  // 1. Summary Metrics Block (Displays at top of Excel file)
+  const summaryRows = [
+    ["IÑAKI POS - SALES & PROFIT REPORT"],
+    ["Report Timeframe:", timeframeLabel],
+    ["Generated Date:", `"${new Date().toLocaleString('en-PH')}"`],
+    [""],
+    ["SUMMARY METRICS"],
+    ["Total Revenue Amount (PHP)", filteredMetrics.revenue.toFixed(2)],
+    ["GCash Payments Amount (PHP)", filteredMetrics.gcash.toFixed(2)],
+    ["Estimated Profit Amount (PHP)", filteredMetrics.profit.toFixed(2)],
+    ["Total Capital Amount (Current Inventory) (PHP)", totalCapital.toFixed(2)],
+    ["Total Transactions (Server Log Entries)", filteredMetrics.count],
+    [""],
+    ["TRANSACTION LOG DETAILS"]
+  ];
+
+  // 2. Detail Table Column Headers
   const headers = [
     "Invoice ID",
     "Date & Time",
@@ -1000,32 +1018,99 @@ const handleExportToExcel = () => {
     "Net Amount (PHP)"
   ];
 
-  // 2. Map transaction data rows
-  const rows = transactions.map((tx) => [
+  // 3. Detailed Data Rows from Filtered Transactions
+  const dataRows = filteredTransactions.map((tx) => [
     `"${tx.id}"`,
     `"${new Date(tx.timestamp).toLocaleString('en-PH')}"`,
-    `"${tx.paymentMethod?.toUpperCase() || ''}"`,
-    `"${tx.gcashRefNumber || '-'}"`,
+    `"${String(tx.paymentMethod || tx.paymentmethod || '').toUpperCase()}"`,
+    `"${tx.gcashRefNumber || tx.gcashrefnumber || '-'}"`,
     Array.isArray(tx.items) ? tx.items.length : 0,
     Number(tx.netSales || tx.netsales || 0).toFixed(2)
   ]);
 
-  // 3. Combine headers and rows
-  const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+  // 4. Combine Summary, Headers, and Data
+  const csvLines = [
+    ...summaryRows.map((row) => row.join(",")),
+    headers.join(","),
+    ...dataRows.map((row) => row.join(","))
+  ];
 
-  // 4. Create Blob with UTF-8 BOM (\ufeff) so Excel displays characters properly
+  const csvContent = csvLines.join("\n");
+
+  // 5. Create Blob with UTF-8 BOM (\ufeff) so Excel formats currency and numbers properly
   const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
 
-  // 5. Trigger download
+  // 6. Trigger Download
   const link = document.createElement("a");
-  const fileName = `Sales_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+  const fileName = `Sales_Report_${analyticsTimeframe}_${new Date().toISOString().slice(0, 10)}.csv`;
   link.setAttribute("href", url);
   link.setAttribute("download", fileName);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 };
+
+// 1. Timeframe State (Daily | Weekly | Monthly | All)
+const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('daily');
+
+// 2. Filter Transactions based on selected Timeframe
+const filteredTransactions = useMemo(() => {
+  const now = new Date();
+  return transactions.filter((tx) => {
+    const txDate = new Date(tx.timestamp);
+    if (analyticsTimeframe === 'daily') {
+      return txDate.toDateString() === now.toDateString();
+    }
+    if (analyticsTimeframe === 'weekly') {
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return txDate >= sevenDaysAgo;
+    }
+    if (analyticsTimeframe === 'monthly') {
+      return (
+        txDate.getMonth() === now.getMonth() &&
+        txDate.getFullYear() === now.getFullYear()
+      );
+    }
+    return true; // 'all'
+  });
+}, [transactions, analyticsTimeframe]);
+
+// 3. Recalculate Metrics for Filtered Timeframe
+const filteredMetrics = useMemo(() => {
+  let revenue = 0;
+  let gcash = 0;
+  let gcashCount = 0;
+  let profit = 0;
+
+  filteredTransactions.forEach((tx) => {
+    const net = Number(tx.netSales ?? tx.netsales ?? 0);
+    revenue += net;
+
+    const method = String(tx.paymentMethod ?? tx.paymentmethod ?? '').toLowerCase();
+    if (method === 'gcash') {
+      gcash += net;
+      gcashCount++;
+    }
+
+    if (Array.isArray(tx.items)) {
+      const txCost = tx.items.reduce((acc: number, item: any) => {
+        const cost = Number(item.costPrice ?? item.cost_price ?? item.cost ?? 0);
+        const qty = Number(item.quantity ?? 1);
+        return acc + cost * qty;
+      }, 0);
+      profit += net - txCost;
+    }
+  });
+
+  return {
+    revenue,
+    gcash,
+    gcashCount,
+    profit,
+    count: filteredTransactions.length,
+  };
+}, [filteredTransactions]);
 
     
 
@@ -1273,51 +1358,70 @@ const handleExportToExcel = () => {
        {/* --- 3. ANALYTICS TAB --- */}
         {activeTab === 'analytics' && (
           <div className="flex-1 p-6 overflow-y-auto max-w-6xl mx-auto w-full space-y-6">
-            {/* Analytics Header */}
-            <div className="flex justify-between items-center">
+            {/* Analytics Header & Timeframe Selector */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h2 className="text-lg font-bold">Sales & Profit Analytics</h2>
                 <p className="text-xs text-slate-400">Live transaction server logs synced with Supabase</p>
               </div>
-              <div className="flex items-center gap-2">
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Timeframe Selector Pills */}
+                <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs font-bold">
+                  {(['daily', 'weekly', 'monthly', 'all'] as const).map((tf) => (
+                    <button
+                      key={tf}
+                      onClick={() => setAnalyticsTimeframe(tf)}
+                      className={`px-3 py-1.5 rounded-lg capitalize transition ${
+                        analyticsTimeframe === tf
+                          ? 'bg-fuchsia-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
+
                 <button
                   onClick={fetchTransactions}
                   className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5"
                 >
-                  <RefreshCw size={14} className={isLoadingTransactions ? 'animate-spin' : ''} /> Sync Data
+                  <RefreshCw size={14} className={isLoadingTransactions ? 'animate-spin' : ''} /> Sync
                 </button>
+
                 <button
                   onClick={handleExportToExcel}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 border border-slate-700"
                 >
                   <Download size={14} /> Export Report
                 </button>
               </div>
             </div>
 
-            {/* Summary Metric Cards */}
+            {/* Metric Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               {/* 1. Total Revenue */}
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block font-semibold">Total Revenue</span>
-                <span className="font-mono text-2xl font-bold text-emerald-400">₱{totalSales.toFixed(2)}</span>
-                <span className="text-[10px] text-slate-500 block font-semibold">{transactions.length} total transactions</span>
+                <span className="text-slate-400 text-xs block font-semibold capitalize">{analyticsTimeframe} Revenue</span>
+                <span className="font-mono text-2xl font-bold text-emerald-400">₱{filteredMetrics.revenue.toFixed(2)}</span>
+                <span className="text-[10px] text-slate-500 block font-semibold">{filteredMetrics.count} transactions</span>
               </div>
 
               {/* 2. GCash Payments */}
               <div className="bg-slate-900 border border-blue-500/30 p-4 rounded-2xl space-y-1 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/30">
                 <div className="flex justify-between items-center">
-                  <span className="text-blue-300 text-xs block font-semibold">GCash Payments</span>
+                  <span className="text-blue-300 text-xs block font-semibold capitalize">{analyticsTimeframe} GCash</span>
                   <CreditCard size={18} className="text-blue-400" />
                 </div>
-                <span className="font-mono text-2xl font-bold text-blue-400">₱{gcashTotalSales.toFixed(2)}</span>
-                <span className="text-[10px] text-blue-300/80 block font-semibold">{gcashCount} GCash transactions</span>
+                <span className="font-mono text-2xl font-bold text-blue-400">₱{filteredMetrics.gcash.toFixed(2)}</span>
+                <span className="text-[10px] text-blue-300/80 block font-semibold">{filteredMetrics.gcashCount} transactions</span>
               </div>
 
               {/* 3. Estimated Profit */}
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block font-semibold">Estimated Profit</span>
-                <span className="font-mono text-2xl font-bold text-fuchsia-400">₱{estimatedProfit.toFixed(2)}</span>
+                <span className="text-slate-400 text-xs block font-semibold capitalize">{analyticsTimeframe} Profit</span>
+                <span className="font-mono text-2xl font-bold text-fuchsia-400">₱{filteredMetrics.profit.toFixed(2)}</span>
                 <span className="text-[10px] text-slate-500 block font-semibold">Net revenue - cost</span>
               </div>
 
@@ -1330,24 +1434,24 @@ const handleExportToExcel = () => {
                 <span className="font-mono text-2xl font-bold text-indigo-400">
                   ₱{totalCapital.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
-                <span className="text-[10px] text-slate-500 block font-semibold">Cost Price × Available Stock</span>
+                <span className="text-[10px] text-slate-500 block font-semibold">Cost × Available Stock</span>
               </div>
 
               {/* 5. Total Transactions */}
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                <span className="text-slate-400 text-xs block font-semibold">Total Transactions</span>
-                <span className="font-mono text-2xl font-bold text-amber-400">{transactions.length}</span>
+                <span className="text-slate-400 text-xs block font-semibold capitalize">{analyticsTimeframe} Logs</span>
+                <span className="font-mono text-2xl font-bold text-amber-400">{filteredMetrics.count}</span>
                 <span className="text-[10px] text-slate-500 block font-semibold">Server log entries</span>
               </div>
             </div>
 
-            {/* Supabase Transaction Log Table */}
+            {/* Filtered Transaction Log Table */}
             <div className="space-y-3">
-              <h3 className="font-bold text-sm text-slate-200">Supabase Transaction Log</h3>
+              <h3 className="font-bold text-sm text-slate-200 capitalize">{analyticsTimeframe} Transaction Log</h3>
               <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                {transactions.length === 0 ? (
+                {filteredTransactions.length === 0 ? (
                   <div className="p-8 text-center text-slate-500 text-xs">
-                    {isLoadingTransactions ? 'Loading server transactions...' : 'No processed transactions found.'}
+                    {isLoadingTransactions ? 'Loading transactions...' : `No ${analyticsTimeframe} transactions found.`}
                   </div>
                 ) : (
                   <table className="w-full text-left text-xs text-slate-300">
@@ -1362,7 +1466,7 @@ const handleExportToExcel = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
-                      {transactions.map((tx) => (
+                      {filteredTransactions.map((tx) => (
                         <tr key={tx.id} className="hover:bg-slate-800/40 transition">
                           <td className="p-3.5 font-mono text-slate-300 font-bold">{tx.id}</td>
                           <td className="p-3.5 text-slate-400 text-[11px]">
@@ -1371,16 +1475,16 @@ const handleExportToExcel = () => {
                           <td className="p-3.5 uppercase font-bold">
                             <span
                               className={`px-2 py-0.5 rounded text-[10px] ${
-                                tx.paymentMethod === 'gcash'
+                                String(tx.paymentMethod || tx.paymentmethod).toLowerCase() === 'gcash'
                                   ? 'bg-blue-500/20 text-blue-400'
                                   : 'bg-emerald-500/20 text-emerald-400'
                               }`}
                             >
-                              {tx.paymentMethod}
+                              {tx.paymentMethod || tx.paymentmethod}
                             </span>
                           </td>
                           <td className="p-3.5 font-mono text-slate-400 text-[11px]">
-                            {tx.gcashRefNumber || '-'}
+                            {tx.gcashRefNumber || tx.gcashrefnumber || '-'}
                           </td>
                           <td className="p-3.5 text-slate-400">
                             {Array.isArray(tx.items) ? tx.items.length : 0} items
