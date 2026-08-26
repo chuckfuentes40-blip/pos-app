@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -925,6 +925,52 @@ const updateQuantity = (id: string, delta: number) => {
         setIsSavingBulk(false);
       }
     };
+      // 1. Callback to handle adding scanned products to the cart
+const handleBarcodeScanned = useCallback((scannedBarcode: string) => {
+  const foundProduct = products.find((p) => p.barcode === scannedBarcode);
+  if (foundProduct) {
+    // Replace 'addToCart' with your component's cart handler if named differently
+    addToCart(foundProduct);
+  } else {
+    console.warn('No product found matching barcode:', scannedBarcode);
+  }
+}, [products]);
+
+// 2. Hardware Gun Listener with corrected variable name
+useEffect(() => {
+  if (posScanMethod !== 'hardware') return;
+
+  let barcodeBuffer = '';
+  let timeoutId: NodeJS.Timeout;
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+    if (e.key === 'Enter') {
+      if (barcodeBuffer.trim()) {
+        handleBarcodeScanned(barcodeBuffer.trim());
+        barcodeBuffer = '';
+      }
+      return;
+    }
+
+    if (e.key.length === 1) {
+      barcodeBuffer += e.key;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        barcodeBuffer = '';
+      }, 100);
+    }
+  };
+
+  window.addEventListener('keydown', handleKeyDown);
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown);
+    clearTimeout(timeoutId);
+  };
+}, [posScanMethod, handleBarcodeScanned]);
+    
 
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} flex flex-col font-sans`}>
