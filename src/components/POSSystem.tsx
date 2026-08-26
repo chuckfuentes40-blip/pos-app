@@ -296,21 +296,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
 
 
 
-
-  
-
- return (
-  <div 
-    className="min-h-screen flex flex-col transition-colors duration-200"
-    style={{
-      backgroundColor: 'var(--bg-primary)',
-      color: 'var(--text-primary)',
-      fontFamily: 'var(--font-family)'
-    }}
-  >
-    {/* Navigation & Tab Content */}
-  </div>
-);
+ 
   if (!isOpen) return null;
 
   return (
@@ -371,6 +357,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
     </div>
   );
 };
+
+
 
 // --- MAIN POS SYSTEM COMPONENT ---
 export default function POSSystem() {
@@ -1172,7 +1160,14 @@ const applyPreset = (preset: typeof DEFAULT_THEME) => {
 
   return (
   
-    <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} flex flex-col font-sans`}>
+        <div 
+        className="min-h-screen flex flex-col transition-colors duration-200"
+        style={{
+          backgroundColor: 'var(--bg-primary)',
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-family)'
+        }}
+      >
       {/* Top Header Navigation */}
       <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
@@ -2230,3 +2225,4 @@ const applyPreset = (preset: typeof DEFAULT_THEME) => {
     </div>
   );
 }
+
