@@ -292,6 +292,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
     }
   };
 
+  
+
+  
+
   if (!isOpen) return null;
 
   return (
@@ -355,11 +359,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
 
 // --- MAIN POS SYSTEM COMPONENT ---
 export default function POSSystem() {
+  const [products, setProducts] = useState<Product[]>([]);
   const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'analytics' | 'ledger' | 'settings'>('pos');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // Supabase Data States
-  const [products, setProducts] = useState<Product[]>([]);
   const [transactions, setTransactions] = useState<ReceiptData[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
@@ -412,38 +416,65 @@ export default function POSSystem() {
     { id: 'l2', customerName: 'Maria Santos', phone: '09189876543', description: 'Grocery items', amount: 320, status: 'paid' },
   ]);
 
+      // Using 'async function' enables function hoisting across the entire component scope
+async function fetchProducts() {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching products:', error);
+      return;
+    }
+
+    if (data) {
+      setProducts(
+        data.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          barcode: item.barcode || '',
+          costPrice: Number(item.cost_price ?? item.costprice ?? item.cost ?? 0),
+          price: Number(item.price ?? item.unit_price ?? 0),
+          stock: Number(item.stock ?? 0),
+        }))
+      );
+    }
+  } catch (err) {
+    console.error('Unexpected error fetching products:', err);
+  }
+}
+        useEffect(() => {
+      fetchProducts();
+
+      // Subscribe to real-time changes on the `products` table
+      const productsChannel = supabase
+        .channel('products-realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'products' },
+          () => {
+            // Automatically fetch updated list whenever Supabase database changes
+            fetchProducts();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(productsChannel);
+      };
+    }, []);
+
+
+    
+
   // Fetch Supabase data on mount
   useEffect(() => {
     fetchProducts();
     fetchTransactions();
   }, []);
 
-  // Fetch Products from `products` table
-  const fetchProducts = async () => {
-    setIsLoadingProducts(true);
-    try {
-      const { data, error } = await supabase.from('products').select('*').order('name');
-      if (error) {
-        console.error('Error fetching products:', error);
-      } else if (data) {
-        setProducts(
-          data.map((p) => ({
-            id: p.id,
-            name: p.name,
-            barcode: p.barcode || '',
-            category: 'General',
-            costPrice: Number(p.cost || 0),
-            price: Number(p.price || 0),
-            stock: Number(p.stock || 0),
-          }))
-        );
-      }
-    } catch (err) {
-      console.error('Database connection error:', err);
-    } finally {
-      setIsLoadingProducts(false);
-    }
-  };
 
   // Fetch Transactions from `transactions` table
   const fetchTransactions = async () => {
@@ -846,32 +877,54 @@ const updateQuantity = (id: string, delta: number) => {
     }));
   };
 
-  // Save All Modified Stocks to Supabase
-  const handleSaveBulkStock = async () => {
-    setIsSavingBulk(true);
-    try {
-      // Filter only items whose stock levels actually changed
-      const updates = products
-        .filter((p) => bulkStocks[p.id] !== undefined && bulkStocks[p.id] !== p.stock)
-        .map((p) =>
+      const handleSaveBulkStock = async () => {
+      setIsSavingBulk(true);
+      try {
+        const timestamp = new Date().toISOString();
+
+        // 1. Identify items with changed stock levels
+        const modifiedProducts = products.filter(
+          (p) => bulkStocks[p.id] !== undefined && bulkStocks[p.id] !== p.stock
+        );
+
+        if (modifiedProducts.length === 0) {
+          setIsBulkEditing(false);
+          setIsSavingBulk(false);
+          return;
+        }
+
+        // 2. Prepare Supabase updates for products & inventory ledger
+        const productPromises = modifiedProducts.map((p) =>
           supabase
             .from('products')
             .update({ stock: bulkStocks[p.id] })
             .eq('id', p.id)
         );
 
-      if (updates.length > 0) {
-        await Promise.all(updates);
-        await fetchProducts(); // Refresh inventory list
-      }
+        const ledgerPromises = modifiedProducts.map((p) => {
+          const qtyDiff = bulkStocks[p.id] - p.stock;
+          return supabase.from('inventory_ledger').insert([
+            {
+              product_id: p.id,
+              change_qty: qtyDiff,
+              reason: `Bulk Stock Adjustment (${qtyDiff >= 0 ? '+' : ''}${qtyDiff})`,
+              created_at: timestamp,
+            },
+          ]);
+        });
 
-      setIsBulkEditing(false);
-    } catch (err) {
-      console.error('Error saving bulk stock update:', err);
-    } finally {
-      setIsSavingBulk(false);
-    }
-  };
+        // 3. Execute all updates concurrently to Supabase
+        await Promise.all([...productPromises, ...ledgerPromises]);
+
+        // 4. Fetch updated list locally
+        await fetchProducts();
+        setIsBulkEditing(false);
+      } catch (err) {
+        console.error('Failed bulk stock update on Supabase:', err);
+      } finally {
+        setIsSavingBulk(false);
+      }
+    };
 
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} flex flex-col font-sans`}>
