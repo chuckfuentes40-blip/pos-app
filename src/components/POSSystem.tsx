@@ -822,6 +822,57 @@ const updateQuantity = (id: string, delta: number) => {
   gcashRefNumber: receipt.gcashRefNumber || receipt.gcashrefnumber || '',
 });
 
+  // Bulk Stock Edit States
+  const [isBulkEditing, setIsBulkEditing] = useState(false);
+  const [bulkStocks, setBulkStocks] = useState<Record<string, number>>({});
+  const [isSavingBulk, setIsSavingBulk] = useState(false);
+
+  // Start Bulk Edit (Populates local state with current stocks)
+  const handleStartBulkEdit = () => {
+    const initialStocks: Record<string, number> = {};
+    products.forEach((p) => {
+      initialStocks[p.id] = p.stock;
+    });
+    setBulkStocks(initialStocks);
+    setIsBulkEditing(true);
+  };
+
+  // Handle Input Value Changes
+  const handleBulkStockChange = (productId: string, value: string) => {
+    const parsedValue = parseInt(value, 10);
+    setBulkStocks((prev) => ({
+      ...prev,
+      [productId]: isNaN(parsedValue) ? 0 : Math.max(0, parsedValue),
+    }));
+  };
+
+  // Save All Modified Stocks to Supabase
+  const handleSaveBulkStock = async () => {
+    setIsSavingBulk(true);
+    try {
+      // Filter only items whose stock levels actually changed
+      const updates = products
+        .filter((p) => bulkStocks[p.id] !== undefined && bulkStocks[p.id] !== p.stock)
+        .map((p) =>
+          supabase
+            .from('products')
+            .update({ stock: bulkStocks[p.id] })
+            .eq('id', p.id)
+        );
+
+      if (updates.length > 0) {
+        await Promise.all(updates);
+        await fetchProducts(); // Refresh inventory list
+      }
+
+      setIsBulkEditing(false);
+    } catch (err) {
+      console.error('Error saving bulk stock update:', err);
+    } finally {
+      setIsSavingBulk(false);
+    }
+  };
+
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} flex flex-col font-sans`}>
       {/* Top Header Navigation */}
@@ -969,19 +1020,51 @@ const updateQuantity = (id: string, delta: number) => {
         {/* --- 2. INVENTORY TAB --- */}
         {activeTab === 'inventory' && (
           <div className="flex-1 p-6 overflow-y-auto max-w-6xl mx-auto w-full space-y-4">
+            {/* Header & Action Controls */}
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-bold">Inventory Management</h2>
                 <p className="text-xs text-slate-400">Manage stock, cost prices, and barcodes directly in Supabase</p>
               </div>
-              <button
-                onClick={handleOpenAddProduct}
-                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-lg shadow-fuchsia-600/30"
-              >
-                <Plus size={16} /> Add Product
-              </button>
+              
+              <div className="flex items-center gap-2">
+                {!isBulkEditing ? (
+                  <>
+                    <button
+                      onClick={handleStartBulkEdit}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-slate-700"
+                    >
+                      Bulk Edit Stock
+                    </button>
+                    <button
+                      onClick={handleOpenAddProduct}
+                      className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-lg shadow-fuchsia-600/30"
+                    >
+                      <Plus size={16} /> Add Product
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsBulkEditing(false)}
+                      disabled={isSavingBulk}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl transition border border-slate-700 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveBulkStock}
+                      disabled={isSavingBulk}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-lg shadow-emerald-600/30 disabled:opacity-50"
+                    >
+                      {isSavingBulk ? 'Saving...' : 'Save All Updates'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
+            {/* Products Table */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[10px]">
@@ -1001,7 +1084,24 @@ const updateQuantity = (id: string, delta: number) => {
                       <td className="p-3.5 font-mono text-slate-400">{p.barcode || 'N/A'}</td>
                       <td className="p-3.5 font-mono text-emerald-400">₱{(p.costPrice || 0).toFixed(2)}</td>
                       <td className="p-3.5 font-mono text-amber-400">₱{p.price.toFixed(2)}</td>
-                      <td className="p-3.5 font-mono font-bold">{p.stock}</td>
+                      
+                      {/* --- EDITABLE STOCK COLUMN --- */}
+                      <td className="p-3.5 font-mono font-bold">
+                        {isBulkEditing ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={bulkStocks[p.id] ?? p.stock}
+                            onChange={(e) => handleBulkStockChange(p.id, e.target.value)}
+                            className="w-20 bg-slate-950 border border-fuchsia-500 text-white text-xs font-mono font-bold text-center px-2 py-1 rounded-lg focus:outline-none focus:ring-1 focus:ring-fuchsia-400"
+                          />
+                        ) : (
+                          <span className={p.stock <= 0 ? 'text-rose-400' : 'text-slate-100'}>
+                            {p.stock}
+                          </span>
+                        )}
+                      </td>
+
                       <td className="p-3.5 text-right space-x-2">
                         <button onClick={() => handleOpenEditProduct(p)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"><Edit size={14} /></button>
                         <button onClick={() => handleDeleteProduct(p.id)} className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg"><Trash2 size={14} /></button>
