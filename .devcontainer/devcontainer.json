@@ -1,0 +1,9 @@
+{
+  "name": "POS App Dev Container",
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js Application",
+      "visibility": "public"
+    }
+  }
+}
