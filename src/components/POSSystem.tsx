@@ -293,12 +293,24 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ isOpen, onClose, o
     }
   };
 
- 
+
+
+
 
   
 
-  
-
+ return (
+  <div 
+    className="min-h-screen flex flex-col transition-colors duration-200"
+    style={{
+      backgroundColor: 'var(--bg-primary)',
+      color: 'var(--text-primary)',
+      fontFamily: 'var(--font-family)'
+    }}
+  >
+    {/* Navigation & Tab Content */}
+  </div>
+);
   if (!isOpen) return null;
 
   return (
@@ -1157,18 +1169,6 @@ const applyPreset = (preset: typeof DEFAULT_THEME) => {
 
 
 
-    return (
-  <div 
-    className="min-h-screen flex flex-col transition-colors duration-200"
-    style={{
-      backgroundColor: 'var(--bg-primary)',
-      color: 'var(--text-primary)',
-      fontFamily: 'var(--font-family)'
-    }}
-  >
-    {/* Navigation & Tab Content */}
-  </div>
-);
 
   return (
   
