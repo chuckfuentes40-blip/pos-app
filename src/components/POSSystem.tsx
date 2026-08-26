@@ -1682,171 +1682,171 @@ const applyPreset = (preset: typeof DEFAULT_THEME) => {
               </div>
             </div>
 
-            {/* Theme & Visual Customization Section */}
-            <div className="p-5 rounded-2xl border space-y-5" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-              <div>
-                <h3 className="font-semibold text-sm">Theme Appearance & Customization</h3>
-                <p className="text-xs opacity-70">Personalize colors, card borders, background, and fonts across the app.</p>
-              </div>
+           {/* Theme & Visual Customization Section */}
+<div className="p-5 rounded-2xl border space-y-5" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+  <div>
+    <h3 className="font-semibold text-sm">Theme Appearance & Customization</h3>
+    <p className="text-xs opacity-70">Personalize colors, card borders, background, and fonts across the app.</p>
+  </div>
 
-              {/* Quick Presets */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold block">Quick Presets</label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => applyPreset(DEFAULT_THEME)}
-                    className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
-                    style={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }}
-                  >
-                    🌙 Midnight Dark
-                  </button>
+  {/* Quick Presets */}
+  <div className="space-y-2">
+    <label className="text-xs font-bold block">Quick Presets</label>
+    <div className="flex flex-wrap gap-2">
+      <button
+        onClick={() => applyPreset(DEFAULT_THEME)}
+        className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
+        style={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }}
+      >
+        🌙 Midnight Dark
+      </button>
 
-                  <button
-                    onClick={() => applyPreset({
-                      bgPrimary: '#052e16',
-                      bgCard: '#064e3b',
-                      borderColor: '#047857',
-                      textPrimary: '#ecfdf5',
-                      accentColor: '#10b981',
-                      fontFamily: 'sans-serif'
-                    })}
-                    className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
-                    style={{ backgroundColor: '#064e3b', borderColor: '#047857', color: '#ecfdf5' }}
-                  >
-                    🌲 Emerald Forest
-                  </button>
+      <button
+        onClick={() => applyPreset({
+          bgPrimary: '#052e16',
+          bgCard: '#064e3b',
+          borderColor: '#047857',
+          textPrimary: '#ecfdf5',
+          accentColor: '#10b981',
+          fontFamily: 'sans-serif'
+        })}
+        className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
+        style={{ backgroundColor: '#064e3b', borderColor: '#047857', color: '#ecfdf5' }}
+      >
+        🌲 Emerald Forest
+      </button>
 
-                  <button
-                    onClick={() => applyPreset({
-                      bgPrimary: '#18181b',
-                      bgCard: '#27272a',
-                      borderColor: '#3f3f46',
-                      textPrimary: '#fafafa',
-                      accentColor: '#f43f5e',
-                      fontFamily: 'monospace'
-                    })}
-                    className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
-                    style={{ backgroundColor: '#27272a', borderColor: '#3f3f46', color: '#f43f5e' }}
-                  >
-                    🤖 Cyber Terminal
-                  </button>
+      <button
+        onClick={() => applyPreset({
+          bgPrimary: '#18181b',
+          bgCard: '#27272a',
+          borderColor: '#3f3f46',
+          textPrimary: '#fafafa',
+          accentColor: '#f43f5e',
+          fontFamily: 'monospace'
+        })}
+        className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
+        style={{ backgroundColor: '#27272a', borderColor: '#3f3f46', color: '#f43f5e' }}
+      >
+        🤖 Cyber Terminal
+      </button>
 
-                  <button
-                    onClick={() => applyPreset({
-                      bgPrimary: '#f8fafc',
-                      bgCard: '#ffffff',
-                      borderColor: '#e2e8f0',
-                      textPrimary: '#0f172a',
-                      accentColor: '#2563eb',
-                      fontFamily: 'sans-serif'
-                    })}
-                    className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
-                    style={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#0f172a' }}
-                  >
-                    ☀️ Clean Light
-                  </button>
-                </div>
-              </div>
+      <button
+        onClick={() => applyPreset({
+          bgPrimary: '#f8fafc',
+          bgCard: '#ffffff',
+          borderColor: '#e2e8f0',
+          textPrimary: '#0f172a',
+          accentColor: '#2563eb',
+          fontFamily: 'sans-serif'
+        })}
+        className="px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
+        style={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#0f172a' }}
+      >
+        ☀️ Clean Light
+      </button>
+    </div>
+  </div>
 
-              {/* Custom Color Controls */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
-                {/* Main Background Color */}
-                <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-                  <div>
-                    <p className="text-xs font-bold">Main Background</p>
-                    <p className="text-[10px] opacity-60">App body background</p>
-                  </div>
-                  <input
-                    type="color"
-                    value={appTheme.bgPrimary}
-                    onChange={(e) => setAppTheme({ ...appTheme, bgPrimary: e.target.value })}
-                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-                  />
-                </div>
+  {/* Custom Color Controls */}
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
+    {/* Main Background Color */}
+    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
+      <div>
+        <p className="text-xs font-bold">Main Background</p>
+        <p className="text-[10px] opacity-60">App body background</p>
+      </div>
+      <input
+        type="color"
+        value={appTheme.bgPrimary}
+        onChange={(e) => setAppTheme({ ...appTheme, bgPrimary: e.target.value })}
+        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+      />
+    </div>
 
-                {/* Card Background Color */}
-                <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-                  <div>
-                    <p className="text-xs font-bold">Container / Cards</p>
-                    <p className="text-[10px] opacity-60">Panel surface color</p>
-                  </div>
-                  <input
-                    type="color"
-                    value={appTheme.bgCard}
-                    onChange={(e) => setAppTheme({ ...appTheme, bgCard: e.target.value })}
-                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-                  />
-                </div>
+    {/* Card Background Color */}
+    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
+      <div>
+        <p className="text-xs font-bold">Container / Cards</p>
+        <p className="text-[10px] opacity-60">Panel surface color</p>
+      </div>
+      <input
+        type="color"
+        value={appTheme.bgCard}
+        onChange={(e) => setAppTheme({ ...appTheme, bgCard: e.target.value })}
+        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+      />
+    </div>
 
-                {/* Border Color */}
-                <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-                  <div>
-                    <p className="text-xs font-bold">Borders</p>
-                    <p className="text-[10px] opacity-60">Card borders & dividers</p>
-                  </div>
-                  <input
-                    type="color"
-                    value={appTheme.borderColor}
-                    onChange={(e) => setAppTheme({ ...appTheme, borderColor: e.target.value })}
-                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-                  />
-                </div>
+    {/* Border Color */}
+    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
+      <div>
+        <p className="text-xs font-bold">Borders</p>
+        <p className="text-[10px] opacity-60">Card borders & dividers</p>
+      </div>
+      <input
+        type="color"
+        value={appTheme.borderColor}
+        onChange={(e) => setAppTheme({ ...appTheme, borderColor: e.target.value })}
+        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+      />
+    </div>
 
-                {/* Accent Color */}
-                <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-                  <div>
-                    <p className="text-xs font-bold">Accent Highlight</p>
-                    <p className="text-[10px] opacity-60">Active tab & key focus</p>
-                  </div>
-                  <input
-                    type="color"
-                    value={appTheme.accentColor}
-                    onChange={(e) => setAppTheme({ ...appTheme, accentColor: e.target.value })}
-                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-                  />
-                </div>
+    {/* Accent Color */}
+    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
+      <div>
+        <p className="text-xs font-bold">Accent Highlight</p>
+        <p className="text-[10px] opacity-60">Active tab & key focus</p>
+      </div>
+      <input
+        type="color"
+        value={appTheme.accentColor}
+        onChange={(e) => setAppTheme({ ...appTheme, accentColor: e.target.value })}
+        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+      />
+    </div>
 
-                {/* Text Color */}
-                <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-                  <div>
-                    <p className="text-xs font-bold">Typography Text</p>
-                    <p className="text-[10px] opacity-60">Main text color</p>
-                  </div>
-                  <input
-                    type="color"
-                    value={appTheme.textPrimary}
-                    onChange={(e) => setAppTheme({ ...appTheme, textPrimary: e.target.value })}
-                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-                  />
-                </div>
+    {/* Text Color */}
+    <div className="p-3 rounded-xl border flex items-center justify-between" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
+      <div>
+        <p className="text-xs font-bold">Typography Text</p>
+        <p className="text-[10px] opacity-60">Main text color</p>
+      </div>
+      <input
+        type="color"
+        value={appTheme.textPrimary}
+        onChange={(e) => setAppTheme({ ...appTheme, textPrimary: e.target.value })}
+        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+      />
+    </div>
 
-                {/* Font Family Selector */}
-                <div className="p-3 rounded-xl border space-y-1" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-                  <p className="text-xs font-bold">App Font Family</p>
-                  <select
-                    value={appTheme.fontFamily}
-                    onChange={(e) => setAppTheme({ ...appTheme, fontFamily: e.target.value })}
-                    className="w-full border text-xs rounded-lg p-1.5 focus:outline-none"
-                    style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
-                  >
-                    <option value="sans-serif">Sans-Serif (Modern Clean)</option>
-                    <option value="monospace">Monospace (Terminal Tech)</option>
-                    <option value="serif">Serif (Classic)</option>
-                    <option value="system-ui">System Default UI</option>
-                  </select>
-                </div>
-              </div>
+    {/* Font Family Selector */}
+    <div className="p-3 rounded-xl border space-y-1" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
+      <p className="text-xs font-bold">App Font Family</p>
+      <select
+        value={appTheme.fontFamily}
+        onChange={(e) => setAppTheme({ ...appTheme, fontFamily: e.target.value })}
+        className="w-full border text-xs rounded-lg p-1.5 focus:outline-none"
+        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+      >
+        <option value="sans-serif">Sans-Serif (Modern Clean)</option>
+        <option value="monospace">Monospace (Terminal Tech)</option>
+        <option value="serif">Serif (Classic)</option>
+        <option value="system-ui">System Default UI</option>
+      </select>
+    </div>
+  </div>
 
-              {/* Reset Default Action */}
-              <div className="flex justify-end pt-2">
-                <button
-                  onClick={() => applyPreset(DEFAULT_THEME)}
-                  className="text-xs underline transition opacity-70 hover:opacity-100"
-                >
-                  Reset to Default Theme
-                </button>
-              </div>
-            </div>
+  {/* Reset Default Action */}
+  <div className="flex justify-end pt-2">
+    <button
+      onClick={() => applyPreset(DEFAULT_THEME)}
+      className="text-xs underline transition opacity-70 hover:opacity-100"
+    >
+      Reset to Default Theme
+    </button>
+  </div>
+</div>
           </div>
         )}
       </main>
