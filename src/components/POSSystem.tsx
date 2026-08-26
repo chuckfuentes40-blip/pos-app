@@ -1227,7 +1227,8 @@ useEffect(() => {
 
        {/* --- 3. ANALYTICS TAB --- */}
         {activeTab === 'analytics' && (
-          <div className="flex-1 p-6 overflow-y-auto max-w-5xl mx-auto w-full space-y-6">
+          <div className="flex-1 p-6 overflow-y-auto max-w-6xl mx-auto w-full space-y-6">
+            {/* Analytics Header */}
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-bold">Sales & Profit Analytics</h2>
@@ -1249,9 +1250,8 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* Updated to lg:grid-cols-5 to accommodate the new card */}
+            {/* Summary Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              
               {/* 1. Total Revenue */}
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
                 <span className="text-slate-400 text-xs block font-semibold">Total Revenue</span>
@@ -1276,7 +1276,7 @@ useEffect(() => {
                 <span className="text-[10px] text-slate-500 block font-semibold">Net revenue - cost</span>
               </div>
 
-              {/* 👇 4. NEW TOTAL INVENTORY CAPITAL CARD 👇 */}
+              {/* 4. Total Capital */}
               <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-xs block font-semibold">Total Capital</span>
@@ -1294,12 +1294,61 @@ useEffect(() => {
                 <span className="font-mono text-2xl font-bold text-amber-400">{transactions.length}</span>
                 <span className="text-[10px] text-slate-500 block font-semibold">Server log entries</span>
               </div>
-
             </div>
 
+            {/* Supabase Transaction Log Table */}
             <div className="space-y-3">
               <h3 className="font-bold text-sm text-slate-200">Supabase Transaction Log</h3>
-              {/* Transaction table continues here... */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                {transactions.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-xs">
+                    {isLoadingTransactions ? 'Loading server transactions...' : 'No processed transactions found.'}
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[10px]">
+                      <tr>
+                        <th className="p-3.5">Invoice ID</th>
+                        <th className="p-3.5">Date & Time</th>
+                        <th className="p-3.5">Method</th>
+                        <th className="p-3.5">GCash Ref #</th>
+                        <th className="p-3.5">Items</th>
+                        <th className="p-3.5 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {transactions.map((tx) => (
+                        <tr key={tx.id} className="hover:bg-slate-800/40 transition">
+                          <td className="p-3.5 font-mono text-slate-300 font-bold">{tx.id}</td>
+                          <td className="p-3.5 text-slate-400 text-[11px]">
+                            {new Date(tx.timestamp).toLocaleString('en-PH')}
+                          </td>
+                          <td className="p-3.5 uppercase font-bold">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] ${
+                                tx.paymentMethod === 'gcash'
+                                  ? 'bg-blue-500/20 text-blue-400'
+                                  : 'bg-emerald-500/20 text-emerald-400'
+                              }`}
+                            >
+                              {tx.paymentMethod}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono text-slate-400 text-[11px]">
+                            {tx.gcashRefNumber || '-'}
+                          </td>
+                          <td className="p-3.5 text-slate-400">
+                            {Array.isArray(tx.items) ? tx.items.length : 0} items
+                          </td>
+                          <td className="p-3.5 text-right font-mono font-bold text-amber-400">
+                            ₱{Number(tx.netSales || tx.netsales || 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
           </div>
         )}
