@@ -982,6 +982,51 @@ useEffect(() => {
     clearTimeout(timeoutId);
   };
 }, [posScanMethod, handleBarcodeScanned]);
+
+// Export Transactions to Excel / CSV
+const handleExportToExcel = () => {
+  if (!transactions || transactions.length === 0) {
+    alert("No transaction data available to export.");
+    return;
+  }
+
+  // 1. Define Column Headers
+  const headers = [
+    "Invoice ID",
+    "Date & Time",
+    "Payment Method",
+    "GCash Ref #",
+    "Items Count",
+    "Net Amount (PHP)"
+  ];
+
+  // 2. Map transaction data rows
+  const rows = transactions.map((tx) => [
+    `"${tx.id}"`,
+    `"${new Date(tx.timestamp).toLocaleString('en-PH')}"`,
+    `"${tx.paymentMethod?.toUpperCase() || ''}"`,
+    `"${tx.gcashRefNumber || '-'}"`,
+    Array.isArray(tx.items) ? tx.items.length : 0,
+    Number(tx.netSales || tx.netsales || 0).toFixed(2)
+  ]);
+
+  // 3. Combine headers and rows
+  const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+
+  // 4. Create Blob with UTF-8 BOM (\ufeff) so Excel displays characters properly
+  const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  // 5. Trigger download
+  const link = document.createElement("a");
+  const fileName = `Sales_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.setAttribute("href", url);
+  link.setAttribute("download", fileName);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
     
 
   return (
@@ -1242,7 +1287,7 @@ useEffect(() => {
                   <RefreshCw size={14} className={isLoadingTransactions ? 'animate-spin' : ''} /> Sync Data
                 </button>
                 <button
-                  onClick={() => setIsExportModalOpen(true)}
+                  onClick={handleExportToExcel}
                   className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
                 >
                   <Download size={14} /> Export Report
