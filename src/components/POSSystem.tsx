@@ -1233,11 +1233,13 @@ useEffect(() => {
 
       {/* Main View Area */}
       <main className="flex-1 flex overflow-hidden">
-        {/* --- 1. POS TAB --- */}
+       {/* --- 1. POS TAB --- */}
         {activeTab === 'pos' && (
-          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-            <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto min-w-0">
-              <div className="flex gap-2">
+          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden h-full">
+            {/* Left Side: Search + Scrollable Products */}
+            <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden min-w-0">
+              {/* Fixed Search Bar Header */}
+              <div className="flex gap-2 shrink-0">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-3 text-slate-500" size={16} />
                   <input
@@ -1250,41 +1252,45 @@ useEffect(() => {
                 </div>
                 <button
                   onClick={() => setIsPosCameraOpen(true)}
-                  className="bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 px-3.5 rounded-xl flex items-center gap-1.5 text-xs font-bold hover:bg-fuchsia-600/30 transition"
+                  className="bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 px-3.5 rounded-xl flex items-center gap-1.5 text-xs font-bold hover:bg-fuchsia-600/30 transition shrink-0"
                 >
                   <Camera size={16} /> Camera
                 </button>
               </div>
 
-              {isLoadingProducts ? (
-                <div className="p-12 text-center text-slate-500 text-xs">Loading products from Supabase...</div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredProducts.map((product) => (
-                    <button
-                      key={product.id}
-                      onClick={() => addToCart(product)}
-                      className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 rounded-2xl p-3.5 text-left transition flex flex-col justify-between space-y-2 group"
-                    >
-                      <div>
-                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{product.barcode || 'NO BARCODE'}</p>
-                        <h3 className="font-bold text-xs text-slate-200 group-hover:text-fuchsia-400 transition line-clamp-2">{product.name}</h3>
-                      </div>
-                      <div className="flex justify-between items-end pt-2 border-t border-slate-800/60">
-                        <span className="font-mono font-bold text-sm text-amber-400">₱{product.price.toFixed(2)}</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 5 ? 'bg-slate-800 text-slate-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                          {product.stock} left
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Scrollable Products Area */}
+              <div className="flex-1 overflow-y-auto pr-1">
+                {isLoadingProducts ? (
+                  <div className="p-12 text-center text-slate-500 text-xs">Loading products from Supabase...</div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {filteredProducts.map((product) => (
+                      <button
+                        key={product.id}
+                        onClick={() => addToCart(product)}
+                        className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 rounded-2xl p-3.5 text-left transition flex flex-col justify-between space-y-2 group"
+                      >
+                        <div>
+                          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{product.barcode || 'NO BARCODE'}</p>
+                          <h3 className="font-bold text-xs text-slate-200 group-hover:text-fuchsia-400 transition line-clamp-2">{product.name}</h3>
+                        </div>
+                        <div className="flex justify-between items-end pt-2 border-t border-slate-800/60">
+                          <span className="font-mono font-bold text-sm text-amber-400">₱{product.price.toFixed(2)}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 5 ? 'bg-slate-800 text-slate-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                            {product.stock} left
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Cart Panel */}
-            <div className="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col h-[50vh] lg:h-auto">
-              <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+            {/* Right Side: Fixed Cart Panel */}
+            <div className="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col h-[50vh] lg:h-full shrink-0">
+              {/* Fixed Cart Header */}
+              <div className="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
                 <h2 className="font-bold text-sm text-slate-200 flex items-center gap-2">
                   <ShoppingCart size={16} className="text-fuchsia-400" /> Current Cart
                 </h2>
@@ -1293,6 +1299,7 @@ useEffect(() => {
                 </span>
               </div>
 
+              {/* Scrollable Cart Item List */}
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
                 {cart.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2">
@@ -1319,7 +1326,8 @@ useEffect(() => {
                 )}
               </div>
 
-              <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3">
+              {/* Fixed Cart Summary & Pay Button Footer */}
+              <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3 shrink-0">
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between text-slate-400"><span>Subtotal</span><span className="font-mono">₱{subtotal.toFixed(2)}</span></div>
                   {discount > 0 && <div className="flex justify-between text-rose-400"><span>Discount</span><span className="font-mono">-₱{discount.toFixed(2)}</span></div>}
@@ -1340,7 +1348,6 @@ useEffect(() => {
             </div>
           </div>
         )}
-
         {/* --- 2. INVENTORY TAB --- */}
         {activeTab === 'inventory' && (
           <div className="flex-1 p-6 overflow-y-auto max-w-6xl mx-auto w-full space-y-4">
