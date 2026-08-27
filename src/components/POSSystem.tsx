@@ -1177,177 +1177,178 @@ useEffect(() => {
 
   return (
   
-        <div 
-        className="min-h-screen flex flex-col transition-colors duration-200"
-        style={{
-          backgroundColor: 'var(--bg-primary)',
-          color: 'var(--text-primary)',
-          fontFamily: 'var(--font-family)'
-        }}
+      <div 
+  className="h-screen flex flex-col overflow-hidden transition-colors duration-200"
+  style={{
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
+    fontFamily: 'var(--font-family)'
+  }}
+>
+  {/* Top Header Navigation */}
+  <header 
+    className="border-b px-4 py-3 flex items-center justify-between shrink-0 z-30"
+    style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+  >
+    <div className="flex items-center gap-3">
+      <div 
+        className="h-8 w-8 rounded-lg flex items-center justify-center font-black text-white text-sm"
+        style={{ backgroundColor: 'var(--accent-color)' }}
       >
-      {/* Top Header Navigation */}
-      <header className="border-b px-4 py-3 flex items-center justify-between sticky top-0 z-30"
-          style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
-        >
-          <div className="flex items-center gap-3">
-            <div 
-              className="h-8 w-8 rounded-lg flex items-center justify-center font-black text-white text-sm"
-              style={{ backgroundColor: 'var(--accent-color)' }}
-            >
-              I
-            </div>
-            <h1 className="font-black text-lg tracking-wide">IÑAKI <span style={{ color: 'var(--accent-color)' }}>POS</span></h1>
-          </div>
+        I
+      </div>
+      <h1 className="font-black text-lg tracking-wide">IÑAKI <span style={{ color: 'var(--accent-color)' }}>POS</span></h1>
+    </div>
 
-          <nav 
-            className="flex items-center gap-1 p-1 rounded-xl border text-xs font-bold"
-            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}
+    <nav 
+      className="flex items-center gap-1 p-1 rounded-xl border text-xs font-bold"
+      style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}
+    >
+      {[
+        { id: 'pos', label: 'POS', icon: ShoppingCart },
+        { id: 'inventory', label: 'Inventory', icon: Package },
+        { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+        { id: 'ledger', label: 'Utang Ledger', icon: BookOpen },
+        { id: 'settings', label: 'Settings', icon: Sliders },
+      ].map((tab) => {
+        const Icon = tab.icon;
+        const isActive = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg transition"
+            style={{
+              backgroundColor: isActive ? 'var(--accent-color)' : 'transparent',
+              color: isActive ? '#ffffff' : 'var(--text-primary)',
+              opacity: isActive ? 1 : 0.7
+            }}
           >
-            {[
-              { id: 'pos', label: 'POS', icon: ShoppingCart },
-              { id: 'inventory', label: 'Inventory', icon: Package },
-              { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-              { id: 'ledger', label: 'Utang Ledger', icon: BookOpen },
-              { id: 'settings', label: 'Settings', icon: Sliders },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg transition"
-                  style={{
-                    backgroundColor: isActive ? 'var(--accent-color)' : 'transparent',
-                    color: isActive ? '#ffffff' : 'var(--text-primary)',
-                    opacity: isActive ? 1 : 0.7
-                  }}
-                >
-                  <Icon size={14} />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </header>
+            <Icon size={14} />
+            <span className="hidden sm:inline">{tab.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  </header>
 
-      {/* Main View Area */}
-      <main className="flex-1 flex overflow-hidden">
-       {/* --- 1. POS TAB --- */}
-        {activeTab === 'pos' && (
-          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden h-full">
-            {/* Left Side: Search + Scrollable Products */}
-            <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden min-w-0">
-              {/* Fixed Search Bar Header */}
-              <div className="flex gap-2 shrink-0">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-3 text-slate-500" size={16} />
-                  <input
-                    type="text"
-                    placeholder="Search product name or scan barcode..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-fuchsia-500"
-                  />
-                </div>
-                <button
-                  onClick={() => setIsPosCameraOpen(true)}
-                  className="bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 px-3.5 rounded-xl flex items-center gap-1.5 text-xs font-bold hover:bg-fuchsia-600/30 transition shrink-0"
-                >
-                  <Camera size={16} /> Camera
-                </button>
-              </div>
-
-              {/* Scrollable Products Area */}
-              <div className="flex-1 overflow-y-auto pr-1">
-                {isLoadingProducts ? (
-                  <div className="p-12 text-center text-slate-500 text-xs">Loading products from Supabase...</div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {filteredProducts.map((product) => (
-                      <button
-                        key={product.id}
-                        onClick={() => addToCart(product)}
-                        className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 rounded-2xl p-3.5 text-left transition flex flex-col justify-between space-y-2 group"
-                      >
-                        <div>
-                          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{product.barcode || 'NO BARCODE'}</p>
-                          <h3 className="font-bold text-xs text-slate-200 group-hover:text-fuchsia-400 transition line-clamp-2">{product.name}</h3>
-                        </div>
-                        <div className="flex justify-between items-end pt-2 border-t border-slate-800/60">
-                          <span className="font-mono font-bold text-sm text-amber-400">₱{product.price.toFixed(2)}</span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 5 ? 'bg-slate-800 text-slate-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                            {product.stock} left
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+  {/* Main View Area */}
+  <main className="flex-1 flex overflow-hidden min-h-0">
+    {/* --- 1. POS TAB --- */}
+    {activeTab === 'pos' && (
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden h-full min-h-0">
+        {/* Left Side: Search + Scrollable Products */}
+        <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden min-w-0 h-full">
+          {/* Fixed Search Bar Header */}
+          <div className="flex gap-2 shrink-0">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 text-slate-500" size={16} />
+              <input
+                type="text"
+                placeholder="Search product name or scan barcode..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-fuchsia-500"
+              />
             </div>
-
-            {/* Right Side: Fixed Cart Panel */}
-            <div className="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col h-[50vh] lg:h-full shrink-0">
-              {/* Fixed Cart Header */}
-              <div className="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
-                <h2 className="font-bold text-sm text-slate-200 flex items-center gap-2">
-                  <ShoppingCart size={16} className="text-fuchsia-400" /> Current Cart
-                </h2>
-                <span className="bg-fuchsia-600/20 text-fuchsia-400 text-xs font-bold px-2 py-0.5 rounded-md">
-                  {cart.reduce((a, b) => a + b.quantity, 0)} Items
-                </span>
-              </div>
-
-              {/* Scrollable Cart Item List */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {cart.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2">
-                    <ShoppingCart size={32} />
-                    <p className="text-xs">Cart is empty</p>
-                  </div>
-                ) : (
-                  cart.map((item) => (
-                    <div key={item.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <p className="font-bold text-xs text-slate-200 truncate">{item.name}</p>
-                        <p className="text-[10px] font-mono text-amber-400">₱{item.price.toFixed(2)}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center bg-slate-900 rounded-lg border border-slate-800">
-                          <button onClick={() => updateQuantity(item.id, -1)} className="p-1 text-slate-400 hover:text-white"><Minus size={12} /></button>
-                          <span className="font-mono text-xs font-bold px-2">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.id, 1)} className="p-1 text-slate-400 hover:text-white"><Plus size={12} /></button>
-                        </div>
-                        <button onClick={() => removeFromCart(item.id)} className="text-slate-500 hover:text-rose-400 p-1"><Trash2 size={14} /></button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Fixed Cart Summary & Pay Button Footer */}
-              <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3 shrink-0">
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between text-slate-400"><span>Subtotal</span><span className="font-mono">₱{subtotal.toFixed(2)}</span></div>
-                  {discount > 0 && <div className="flex justify-between text-rose-400"><span>Discount</span><span className="font-mono">-₱{discount.toFixed(2)}</span></div>}
-                  <div className="flex justify-between font-black text-sm text-white pt-1 border-t border-slate-800">
-                    <span>NET TOTAL</span>
-                    <span className="font-mono text-fuchsia-400 text-lg">₱{netTotal.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <button
-                  disabled={cart.length === 0}
-                  onClick={() => setIsPaymentModalOpen(true)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-emerald-600/20"
-                >
-                  Pay Now
-                </button>
-              </div>
-            </div>
+            <button
+              onClick={() => setIsPosCameraOpen(true)}
+              className="bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 px-3.5 rounded-xl flex items-center gap-1.5 text-xs font-bold hover:bg-fuchsia-600/30 transition shrink-0"
+            >
+              <Camera size={16} /> Camera
+            </button>
           </div>
-        )}
+
+          {/* Scrollable Products Area */}
+          <div className="flex-1 overflow-y-auto pr-1">
+            {isLoadingProducts ? (
+              <div className="p-12 text-center text-slate-500 text-xs">Loading products from Supabase...</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filteredProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    onClick={() => addToCart(product)}
+                    className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 rounded-2xl p-3.5 text-left transition flex flex-col justify-between space-y-2 group"
+                  >
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{product.barcode || 'NO BARCODE'}</p>
+                      <h3 className="font-bold text-xs text-slate-200 group-hover:text-fuchsia-400 transition line-clamp-2">{product.name}</h3>
+                    </div>
+                    <div className="flex justify-between items-end pt-2 border-t border-slate-800/60">
+                      <span className="font-mono font-bold text-sm text-amber-400">₱{product.price.toFixed(2)}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 5 ? 'bg-slate-800 text-slate-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                        {product.stock} left
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Side: Fixed Cart Panel */}
+        <div className="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col h-[50vh] lg:h-full shrink-0 min-h-0">
+          {/* Fixed Cart Header */}
+          <div className="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
+            <h2 className="font-bold text-sm text-slate-200 flex items-center gap-2">
+              <ShoppingCart size={16} className="text-fuchsia-400" /> Current Cart
+            </h2>
+            <span className="bg-fuchsia-600/20 text-fuchsia-400 text-xs font-bold px-2 py-0.5 rounded-md">
+              {cart.reduce((a, b) => a + b.quantity, 0)} Items
+            </span>
+          </div>
+
+          {/* Scrollable Cart Item List */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {cart.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2">
+                <ShoppingCart size={32} />
+                <p className="text-xs">Cart is empty</p>
+              </div>
+            ) : (
+              cart.map((item) => (
+                <div key={item.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="font-bold text-xs text-slate-200 truncate">{item.name}</p>
+                    <p className="text-[10px] font-mono text-amber-400">₱{item.price.toFixed(2)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center bg-slate-900 rounded-lg border border-slate-800">
+                      <button onClick={() => updateQuantity(item.id, -1)} className="p-1 text-slate-400 hover:text-white"><Minus size={12} /></button>
+                      <span className="font-mono text-xs font-bold px-2">{item.quantity}</span>
+                      <button onClick={() => updateQuantity(item.id, 1)} className="p-1 text-slate-400 hover:text-white"><Plus size={12} /></button>
+                    </div>
+                    <button onClick={() => removeFromCart(item.id)} className="text-slate-500 hover:text-rose-400 p-1"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Fixed Cart Summary & Pay Button Footer */}
+          <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3 shrink-0">
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between text-slate-400"><span>Subtotal</span><span className="font-mono">₱{subtotal.toFixed(2)}</span></div>
+              {discount > 0 && <div className="flex justify-between text-rose-400"><span>Discount</span><span className="font-mono">-₱{discount.toFixed(2)}</span></div>}
+              <div className="flex justify-between font-black text-sm text-white pt-1 border-t border-slate-800">
+                <span>NET TOTAL</span>
+                <span className="font-mono text-fuchsia-400 text-lg">₱{netTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <button
+              disabled={cart.length === 0}
+              onClick={() => setIsPaymentModalOpen(true)}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-emerald-600/20"
+            >
+              Pay Now
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
         {/* --- 2. INVENTORY TAB --- */}
         {activeTab === 'inventory' && (
           <div className="flex-1 p-6 overflow-y-auto max-w-6xl mx-auto w-full space-y-4">
