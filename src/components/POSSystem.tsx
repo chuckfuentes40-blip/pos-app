@@ -1171,6 +1171,29 @@ useEffect(() => {
   localStorage.setItem('pos_app_theme', JSON.stringify(current));
 }, [theme]);
 
+const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  if (e.key === 'Enter' && searchQuery.trim() !== '') {
+    e.preventDefault();
+
+    // 1. Check for exact barcode match first
+    const exactMatch = products.find(
+      (p) => p.barcode?.toLowerCase() === searchQuery.trim().toLowerCase()
+    );
+
+    if (exactMatch) {
+      addToCart(exactMatch);
+      setSearchQuery(''); // Reset search input for next scan
+      return;
+    }
+
+    // 2. Fallback: If search filters down to exactly 1 product, add it
+    if (filteredProducts.length === 1) {
+      addToCart(filteredProducts[0]);
+      setSearchQuery('');
+    }
+  }
+};
+
 
 
 
@@ -1248,6 +1271,8 @@ useEffect(() => {
                 placeholder="Search product name or scan barcode..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown} // <--- Handles scanner 'Enter' key press
+                autoFocus                       // <--- Ensures scanner types here automatically
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-fuchsia-500"
               />
             </div>
@@ -2083,95 +2108,102 @@ useEffect(() => {
           </div>
         )}
 
-      {/* --- ADD / EDIT PRODUCT MODAL --- */}
-      {isProductModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-slate-100 text-base">
-                {editingProduct ? 'Edit Product Item' : 'Add New Inventory Item'}
-              </h3>
-              <button onClick={() => setIsProductModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
-            </div>
+     {/* --- ADD / EDIT PRODUCT MODAL --- */}
+{isProductModalOpen && (
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
+      <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 className="font-bold text-slate-100 text-base">
+          {editingProduct ? 'Edit Product Item' : 'Add New Inventory Item'}
+        </h3>
+        <button onClick={() => setIsProductModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
 
-            <form onSubmit={handleSaveProduct} className="space-y-3.5">
-              <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">Product Name</label>
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. San Miguel Light 330ml"
-                  value={productForm.name}
-                  onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-fuchsia-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">Barcode ID</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="480000123456"
-                    value={productForm.barcode}
-                    onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-100 focus:outline-none focus:border-fuchsia-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setIsProductCameraOpen(true)}
-                    className="bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 px-3 rounded-xl flex items-center justify-center hover:bg-fuchsia-600/30 transition"
-                  >
-                    <Camera size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2.5">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Cost (₱)</label>
-                  <input
-                    required
-                    type="number"
-                    step="0.01"
-                    value={productForm.costPrice || ''}
-                    onChange={(e) => setProductForm({ ...productForm, costPrice: Number(e.target.value) })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-emerald-400 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Selling (₱)</label>
-                  <input
-                    required
-                    type="number"
-                    step="0.01"
-                    value={productForm.price || ''}
-                    onChange={(e) => setProductForm({ ...productForm, price: Number(e.target.value) })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Stock Qty</label>
-                  <input
-                    required
-                    type="number"
-                    value={productForm.stock || ''}
-                    onChange={(e) => setProductForm({ ...productForm, stock: Number(e.target.value) })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-fuchsia-500"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-fuchsia-600/20 mt-2"
-              >
-                {editingProduct ? 'Save Changes' : 'Add to Supabase Database'}
-              </button>
-            </form>
+      <form onSubmit={handleSaveProduct} className="space-y-3.5">
+        {/* Barcode ID First (Auto-focused for Scanner) */}
+        <div>
+          <label className="text-xs font-semibold text-slate-400 block mb-1">Barcode ID</label>
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              type="text"
+              placeholder="480000123456"
+              value={productForm.barcode}
+              onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault(); // Prevents scanner from submitting form early
+                }
+              }}
+              className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-100 focus:outline-none focus:border-fuchsia-500"
+            />
+            <button
+              type="button"
+              onClick={() => setIsProductCameraOpen(true)}
+              className="bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 px-3 rounded-xl flex items-center justify-center hover:bg-fuchsia-600/30 transition"
+            >
+              <Camera size={16} />
+            </button>
           </div>
         </div>
-      )}
+
+        <div>
+          <label className="text-xs font-semibold text-slate-400 block mb-1">Product Name</label>
+          <input
+            required
+            type="text"
+            placeholder="e.g. San Miguel Light 330ml"
+            value={productForm.name}
+            onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-fuchsia-500"
+          />
+        </div>
+
+        <div className="grid grid-cols-3 gap-2.5">
+          <div>
+            <label className="text-xs font-semibold text-slate-400 block mb-1">Cost (₱)</label>
+            <input
+              required
+              type="number"
+              step="0.01"
+              value={productForm.costPrice || ''}
+              onChange={(e) => setProductForm({ ...productForm, costPrice: Number(e.target.value) })}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-emerald-400 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-400 block mb-1">Selling (₱)</label>
+            <input
+              required
+              type="number"
+              step="0.01"
+              value={productForm.price || ''}
+              onChange={(e) => setProductForm({ ...productForm, price: Number(e.target.value) })}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-400 block mb-1">Stock Qty</label>
+            <input
+              required
+              type="number"
+              value={productForm.stock || ''}
+              onChange={(e) => setProductForm({ ...productForm, stock: Number(e.target.value) })}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-fuchsia-500"
+            />
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-fuchsia-600/20 mt-2"
+        >
+          {editingProduct ? 'Save Changes' : 'Add to Supabase Database'}
+        </button>
+      </form>
+    </div>
+  </div>
+)}
 
       {/* --- CAMERA SCANNER MODALS --- */}
       <CameraScanner
